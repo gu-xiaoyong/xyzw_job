@@ -8,32 +8,6 @@
   "short_name": "xyzw-db.pages",
   "start_url": "/",
   "theme_color": "#2563eb",
-  "icons": [
-    {
-      "src": "https://xyzw-db.pages.dev/vite.svg",
-      "type": "image/svg+xml",
-      "isSquare": false,
-      "isPng": false,
-      "isWebp": false,
-      "isJpg": false,
-      "width": 0,
-      "is512x512": false,
-      "is256x256": false,
-      "is192x192": false
-    },
-    {
-      "src": "https://xyzw-db.pages.dev/favicon.ico",
-      "type": "image/x-icon",
-      "isSquare": false,
-      "isPng": false,
-      "isWebp": false,
-      "isJpg": false,
-      "width": 0,
-      "is512x512": false,
-      "is256x256": false,
-      "is192x192": false
-    }
-  ],
   "id": "https://xyzw-db.pages.dev/",
   "description": "咸鱼之王日常任务"
 }
