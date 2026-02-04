@@ -2,12 +2,12 @@
   "background_color": "#ffffff",
   "dir": "ltr",
   "display": "standalone",
-  "name": "xyzw-db.pages",
+  "name": "xyzw-db",
   "orientation": "any",
   "scope": "/",
-  "short_name": "xyzw-db.pages",
+  "short_name": "xyzw-db",
   "start_url": "/",
-  "theme_color": "#ffffff",
+  "theme_color": "#2563eb",
   "icons": [
     {
       "src": "https://xyzw-db.pages.dev/vite.svg",
@@ -33,5 +33,7 @@
       "is256x256": false,
       "is192x192": false
     }
-  ]
+  ],
+  "description": "咸鱼之王日常任务",
+  "id": "https://xyzw-db.pages.dev/"
 }
