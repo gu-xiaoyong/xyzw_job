@@ -10,26 +10,26 @@
   "theme_color": "#2563eb",
   "icons": [
     {
-      "src": "/icons/192x192-any.png",
+      "src": "/icons/192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons/512x512-any.png",
+      "src": "/icons/512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     // maskable 类型（安卓蒙版图标）
     {
-      "src": "/icons/192x192-maskable.png",
+      "src": "/icons/192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/icons/512x512-maskable.png",
+      "src": "/icons/512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
