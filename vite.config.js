@@ -143,12 +143,13 @@ export default defineConfig(async () => {
       open: true,
       host: true,
       proxy: {
-        // 手机号验证码接口：ucenter 网关按 Host 路由，直连 ucenter 域名并保留
-        // /ucenter-app-server 路径前缀（Cloudflare Workers 的 fetch 无法伪造 Host，
-        // 借道 comb-platform + Host 覆盖的方案在 Worker 上必然 404）。
+        // 手机号验证码接口：ucenter 网关按 Host 路由，直连 ucenter 域名；
+        // 去掉代理前缀后剩余的 /ucenter-app-server/... 即上游真实路径。
+        // （Cloudflare Workers 的 fetch 无法伪造 Host，不能借道 comb-platform）
         "/api/hortor-ucenter": {
           target: "https://ucenter-app-server.hortorgames.com",
           changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/hortor-ucenter/, ""),
           secure: true,
           headers: {
             "User-Agent":
