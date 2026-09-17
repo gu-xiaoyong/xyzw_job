@@ -19,11 +19,13 @@ export default {
     const proxies = [
       {
         prefix: '/api/hortor-ucenter',
-        target: 'https://comb-platform.hortorgames.com',
+        target: 'https://ucenter-app-server.hortorgames.com',
+        // ucenter 网关按 Host 路由且接口挂在 /ucenter-app-server 前缀下；
+        // Cloudflare Workers 的 fetch 无法伪造 Host，因此直连 ucenter 域名并保留前缀
+        keepPrefix: true,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Linux; Android 12; ALN-AL80 Build/HUAWEIALN-AL80; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/114.0.5735.196 Mobile Safari/537.36',
           'Accept': 'application/json',
-          'Host': 'ucenter-app-server.hortorgames.com',
           'Content-Type': 'application/json; charset=utf-8'
         }
       },
@@ -66,7 +68,9 @@ export default {
     if (proxy) {
       // Construct new URL
       const targetUrl = new URL(proxy.target);
-      targetUrl.pathname = url.pathname.replace(proxy.prefix, '') || '/';
+      targetUrl.pathname = proxy.keepPrefix
+        ? url.pathname
+        : (url.pathname.replace(proxy.prefix, '') || '/');
       targetUrl.search = url.search;
 
       // Prepare request headers
