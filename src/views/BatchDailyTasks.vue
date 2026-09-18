@@ -1917,10 +1917,11 @@
       v-model:show="showBatchSettingsModal"
       preset="card"
       title="任务设置"
+      class="batch-settings-modal"
       style="width: 90%; max-width: 700px"
     >
       <div class="settings-content">
-        <n-grid :cols="2" :x-gap="24">
+        <n-grid cols="1 s:2" :x-gap="24" :y-gap="24">
           <!-- 左列：批量操作设置 -->
           <n-grid-item>
             <n-divider title-placement="left" style="margin: 1px 0 8px 0"
@@ -6336,6 +6337,24 @@ const stopBatch = () => {
   .func-tabs-card :deep(.n-tabs .n-tabs-tab--active) {
     border-color: var(--n-bar-color, #18a058);
     background-color: var(--primary-color-light, rgba(24, 160, 88, 0.12));
+  }
+
+  /* 手机端:任务设置弹窗单列布局,输入框加宽,弹窗体内部滚动 */
+  .batch-settings-modal {
+    max-height: 92vh;
+  }
+
+  .batch-settings-modal :deep(.n-card__content) {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px 16px;
+  }
+
+  .batch-settings-modal :deep(.n-input-number),
+  .batch-settings-modal :deep(.n-select) {
+    width: 130px !important;
+    flex-shrink: 0;
   }
 
   .page-header .actions {
