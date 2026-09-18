@@ -6306,7 +6306,7 @@ const stopBatch = () => {
 
   .func-tabs-card :deep(.n-tabs .n-tabs-wrapper) {
     flex-wrap: wrap;
-    justify-content: flex-start;
+    justify-content: center;
     row-gap: 8px;
   }
 
