@@ -19,7 +19,7 @@ function toArrayBuffer(data: BinaryData): ArrayBuffer {
 
 /**
  * WebView 内无法直接保存下载文件时的兜底弹层:
- * 提供一个真正的 https 下载链接(数据经 /api/bin-file 中转),
+ * 提供一个真正的 https 下载链接(数据经 /api/download-file 中转),
  * 可复制到系统浏览器打开下载,或尝试在当前环境直接下载。
  */
 function showBinRelayDialog(fileName: string, relayUrl: string) {
@@ -203,7 +203,7 @@ export async function downloadBinFile(
         blob.size <= 64 * 1024 &&
         typeof btoa === "function"
       ) {
-        relayUrl = `${location.origin}/api/bin-file?n=${encodeURIComponent(fileName)}&d=${toBase64Url(await blob.arrayBuffer())}`;
+        relayUrl = `${location.origin}/api/download-file?n=${encodeURIComponent(fileName)}&d=${toBase64Url(await blob.arrayBuffer())}`;
       }
     } catch (e) {
       relayUrl = "";

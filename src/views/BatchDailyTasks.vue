@@ -4006,7 +4006,7 @@ const exportConfig = async () => {
     const filename = `xyzw_config_${new Date().toISOString().slice(0, 10)}.json`;
     const blob = new Blob([json], { type: "application/json" });
 
-    // 生成中转下载链接(数据编码在链接里,由 /api/bin-file 以附件形式返回)
+    // 生成中转下载链接(数据编码在链接里,由 /api/download-file 以附件形式返回)
     exportRelayUrl.value = "";
     try {
       if (
@@ -4014,7 +4014,7 @@ const exportConfig = async () => {
         blob.size <= 60 * 1024 &&
         typeof btoa === "function"
       ) {
-        exportRelayUrl.value = `${location.origin}/api/bin-file?n=${encodeURIComponent(filename)}&d=${toBase64Url(await blob.arrayBuffer())}`;
+        exportRelayUrl.value = `${location.origin}/api/download-file?n=${encodeURIComponent(filename)}&d=${toBase64Url(await blob.arrayBuffer())}`;
       }
     } catch (e) {
       exportRelayUrl.value = "";

@@ -110,10 +110,11 @@ export default {
       }
     }
 
-    // Stateless bin-file relay: binary carried in query string (base64url),
+    // Stateless file relay: binary carried in query string (base64url),
     // served back as a standard attachment download. Used by App WebView
     // environments that cannot save blob/object-url downloads.
-    if (url.pathname === '/api/bin-file') {
+    // /api/bin-file is kept as a legacy alias of /api/download-file.
+    if (url.pathname === '/api/download-file' || url.pathname === '/api/bin-file') {
       if (request.method === 'OPTIONS') {
         return new Response(null, { headers: corsHeaders });
       }
