@@ -6309,6 +6309,8 @@ const stopBatch = () => {
     flex-wrap: wrap;
     justify-content: center;
     row-gap: 8px;
+    /* 占满整行,否则容器按内容收缩靠左,justify-content: center 不生效 */
+    width: 100%;
   }
 
   /* 收紧页签间距,隐藏原生指示条与导航底边线,避免与按钮重叠 */
@@ -6318,6 +6320,12 @@ const stopBatch = () => {
 
   .func-tabs-card :deep(.n-tabs .n-tabs-scroll-padding),
   .func-tabs-card :deep(.n-tabs .n-tabs-bar) {
+    display: none;
+  }
+
+  /* 页签已一排放下,隐藏两端滚动渐变遮罩(旧版滑动后的残留状态) */
+  .func-tabs-card :deep(.n-tabs .n-tabs-nav-scroll-wrapper::before),
+  .func-tabs-card :deep(.n-tabs .n-tabs-nav-scroll-wrapper::after) {
     display: none;
   }
 
