@@ -6299,23 +6299,44 @@ const stopBatch = () => {
     flex-wrap: wrap;
   }
 
-  /* 手机端:批量功能页签保持正常大小,放不下自动换行成两行 */
+  /* 手机端:页签改为两行网格按钮(4+3),整齐美观 */
   .func-tabs-card :deep(.n-card__content) {
     padding: 12px;
   }
 
   .func-tabs-card :deep(.n-tabs .n-tabs-wrapper) {
-    flex-wrap: wrap;
-    row-gap: 6px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
   }
 
-  /* 换行后底部滑动指示条位置会错乱,隐藏并用激活页签自带下划线替代 */
+  /* 网格下间距由 gap 控制,隐藏原生间隔元素、滑动指示条与导航底边线 */
+  .func-tabs-card :deep(.n-tabs .n-tabs-tab-pad),
+  .func-tabs-card :deep(.n-tabs .n-tabs-scroll-padding),
   .func-tabs-card :deep(.n-tabs .n-tabs-bar) {
     display: none;
   }
 
+  .func-tabs-card :deep(.n-tabs .n-tabs-nav-scroll-content) {
+    border-bottom: none;
+  }
+
+  .func-tabs-card :deep(.n-tabs .n-tabs-tab-wrapper) {
+    display: flex;
+  }
+
+  .func-tabs-card :deep(.n-tabs .n-tabs-tab) {
+    flex: 1;
+    justify-content: center;
+    padding: 8px 4px;
+    border: 1px solid var(--border-color, #efeff5);
+    border-radius: 8px;
+    background-color: var(--bg-tertiary, #f7f7fa);
+  }
+
   .func-tabs-card :deep(.n-tabs .n-tabs-tab--active) {
-    box-shadow: inset 0 -2px 0 0 var(--n-bar-color, #18a058);
+    border-color: var(--n-bar-color, #18a058);
+    background-color: var(--primary-color-light, rgba(24, 160, 88, 0.12));
   }
 
   .page-header .actions {
