@@ -14,19 +14,9 @@
             gap: 12px;
           "
         >
-          <div style="display: flex; align-items: center; gap: 16px">
+          <div class="header-left">
             <h2>批量日常任务</h2>
-            <div
-              style="
-                display: flex;
-                align-items: center;
-                gap: 12px;
-                padding: 8px 12px;
-                background-color: #f8f9fa;
-                border-radius: 8px;
-                border: 1px solid #e9ecef;
-              "
-            >
+            <div class="header-info-box">
               <div style="font-size: 14px; color: #495057">
                 共 {{ scheduledTasks.length }} 个定时任务
               </div>
@@ -41,7 +31,7 @@
               <div v-else style="font-size: 14px; color: #6c757d">
                 暂无定时任务
               </div>
-              <div style="display: flex; gap: 8px">
+              <div class="header-info-actions">
                 <n-button type="primary" size="small" @click="openTaskModal">
                   新增定时任务
                 </n-button>
@@ -61,17 +51,7 @@
               </div>
             </div>
           </div>
-          <div
-            style="
-              display: flex;
-              align-items: center;
-              gap: 12px;
-              padding: 8px 12px;
-              background-color: #f8f9fa;
-              border-radius: 8px;
-              border: 1px solid #e9ecef;
-            "
-          >
+          <div class="header-action-box">
             <n-button
               type="primary"
               @click="startBatch"
@@ -6015,6 +5995,33 @@ const stopBatch = () => {
   margin-bottom: 20px;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.header-left h2 {
+  white-space: nowrap;
+}
+
+.header-info-box,
+.header-action-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.header-info-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .token-item {
   display: flex;
   align-items: center;
@@ -6247,7 +6254,7 @@ const stopBatch = () => {
     padding: 12px;
     height: 100vh;
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
   }
 
   .main-layout {
@@ -6273,6 +6280,23 @@ const stopBatch = () => {
     flex-direction: column;
     gap: 12px;
     align-items: stretch;
+  }
+
+  /* 手机端:工具条允许换行,避免内容被裁剪无法横向滑动 */
+  .header-left {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .header-info-box,
+  .header-action-box {
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .header-info-actions {
+    flex-wrap: wrap;
   }
 
   .page-header .actions {
