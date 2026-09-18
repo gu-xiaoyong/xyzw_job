@@ -273,7 +273,7 @@
         </n-card>
 
         <!-- Batch Functions -->
-        <n-card title="批量功能列表" style="margin-top: 16px">
+        <n-card title="批量功能列表" class="func-tabs-card" style="margin-top: 16px">
           <n-tabs type="line" animated>
             <n-tab-pane name="daily" tab="日常">
               <n-space>
@@ -6297,6 +6297,20 @@ const stopBatch = () => {
 
   .header-info-actions {
     flex-wrap: wrap;
+  }
+
+  /* 手机端:压缩批量功能页签,全部页签(含功法/月度)一屏可见,无需横向滑动 */
+  .func-tabs-card :deep(.n-card__content) {
+    padding: 12px;
+  }
+
+  .func-tabs-card :deep(.n-tabs .n-tabs-tab) {
+    padding: 5px;
+    font-size: 13px;
+  }
+
+  .func-tabs-card :deep(.n-tabs .n-tabs-tab-pad) {
+    width: 2px;
   }
 
   .page-header .actions {
