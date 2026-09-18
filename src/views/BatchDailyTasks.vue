@@ -6299,18 +6299,23 @@ const stopBatch = () => {
     flex-wrap: wrap;
   }
 
-  /* 手机端:压缩批量功能页签,全部页签(含功法/月度)一屏可见,无需横向滑动 */
+  /* 手机端:批量功能页签保持正常大小,放不下自动换行成两行 */
   .func-tabs-card :deep(.n-card__content) {
     padding: 12px;
   }
 
-  .func-tabs-card :deep(.n-tabs .n-tabs-tab) {
-    padding: 5px;
-    font-size: 13px;
+  .func-tabs-card :deep(.n-tabs .n-tabs-wrapper) {
+    flex-wrap: wrap;
+    row-gap: 6px;
   }
 
-  .func-tabs-card :deep(.n-tabs .n-tabs-tab-pad) {
-    width: 2px;
+  /* 换行后底部滑动指示条位置会错乱,隐藏并用激活页签自带下划线替代 */
+  .func-tabs-card :deep(.n-tabs .n-tabs-bar) {
+    display: none;
+  }
+
+  .func-tabs-card :deep(.n-tabs .n-tabs-tab--active) {
+    box-shadow: inset 0 -2px 0 0 var(--n-bar-color, #18a058);
   }
 
   .page-header .actions {
