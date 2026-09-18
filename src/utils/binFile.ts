@@ -67,22 +67,37 @@ function showBinRelayDialog(fileName: string, relayUrl: string) {
   const openBtn = mkBtn("尝试下载", "#2080f0", "#fff");
   const closeBtn = mkBtn("关闭", "#eeeeee", "#555555");
 
-  copyBtn.onclick = async () => {
-    let copied = false;
+  const doCopy = (): boolean => {
+    // 必须在用户手势内同步执行;WebView 的 async clipboard 常被拒绝
     try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(relayUrl);
-        copied = true;
-      }
-    } catch (e) {
-      // fallthrough
-    }
-    if (!copied) {
+      input.focus();
       input.select();
-      copied = document.execCommand("copy");
+      input.setSelectionRange(0, relayUrl.length);
+      return document.execCommand("copy");
+    } catch (e) {
+      return false;
     }
-    copyBtn.textContent = copied ? "已复制" : "复制失败,请长按链接手动复制";
-    setTimeout(() => (copyBtn.textContent = "复制链接"), 2000);
+  };
+
+  copyBtn.onclick = () => {
+    if (doCopy()) {
+      copyBtn.textContent = "已复制";
+      setTimeout(() => (copyBtn.textContent = "复制链接"), 2000);
+      return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard
+        .writeText(relayUrl)
+        .then(() => {
+          copyBtn.textContent = "已复制";
+          setTimeout(() => (copyBtn.textContent = "复制链接"), 2000);
+        })
+        .catch(() => {
+          copyBtn.textContent = "复制失败,请长按链接手动复制";
+        });
+      return;
+    }
+    copyBtn.textContent = "复制失败,请长按链接手动复制";
   };
   openBtn.onclick = () => {
     location.href = relayUrl;

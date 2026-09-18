@@ -4059,29 +4059,38 @@ const exportConfig = async () => {
   }
 };
 
-// 复制文本到剪贴板(clipboard API 不可用时退回 execCommand)
+// 复制文本到剪贴板(先同步 execCommand——必须在用户手势内执行;WebView 的 async clipboard 常被拒绝)
 const copyTextWithFeedback = async (text) => {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.top = "-9999px";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  let copied = false;
+  try {
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    copied = document.execCommand("copy");
+  } catch (e) {
+    copied = false;
+  } finally {
+    document.body.removeChild(ta);
+  }
+  if (copied) return true;
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
+      return await navigator.clipboard
+        .writeText(text)
+        .then(() => true)
+        .catch(() => false);
     }
   } catch (e) {
-    // 继续尝试 execCommand 方式
+    // ignore
   }
-  try {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(ta);
-    return ok;
-  } catch (e) {
-    return false;
-  }
+  return false;
 };
 
 const copyExportText = async () => {
