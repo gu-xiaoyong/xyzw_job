@@ -6299,19 +6299,22 @@ const stopBatch = () => {
     flex-wrap: wrap;
   }
 
-  /* 手机端:页签改为两行网格按钮(4+3),整齐美观 */
+  /* 手机端:页签改为紧凑按钮,流式排布放不下自动换行(第一行约6个) */
   .func-tabs-card :deep(.n-card__content) {
     padding: 12px;
   }
 
   .func-tabs-card :deep(.n-tabs .n-tabs-wrapper) {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    row-gap: 8px;
   }
 
-  /* 网格下间距由 gap 控制,隐藏原生间隔元素、滑动指示条与导航底边线 */
-  .func-tabs-card :deep(.n-tabs .n-tabs-tab-pad),
+  /* 收紧页签间距,隐藏原生指示条与导航底边线,避免与按钮重叠 */
+  .func-tabs-card :deep(.n-tabs .n-tabs-tab-pad) {
+    width: 6px;
+  }
+
   .func-tabs-card :deep(.n-tabs .n-tabs-scroll-padding),
   .func-tabs-card :deep(.n-tabs .n-tabs-bar) {
     display: none;
@@ -6321,14 +6324,9 @@ const stopBatch = () => {
     border-bottom: none;
   }
 
-  .func-tabs-card :deep(.n-tabs .n-tabs-tab-wrapper) {
-    display: flex;
-  }
-
   .func-tabs-card :deep(.n-tabs .n-tabs-tab) {
-    flex: 1;
-    justify-content: center;
-    padding: 8px 4px;
+    padding: 7px 6px;
+    font-size: 13px;
     border: 1px solid var(--border-color, #efeff5);
     border-radius: 8px;
     background-color: var(--bg-tertiary, #f7f7fa);
