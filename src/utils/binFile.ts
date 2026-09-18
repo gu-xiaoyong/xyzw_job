@@ -66,16 +66,56 @@ export function getRoleBinFileName({
   return `bin-${server}服-${roleIndex}-${safeRoleId}-${safeName}.bin`;
 }
 
-export function downloadBinFile(fileName: string, data: BinaryData) {
+export type BinDownloadResult = "shared" | "downloaded" | "cancelled";
+
+/**
+ * 下载 BIN 文件。
+ * 手机/APK 的 WebView 不会处理 blob 下载(静默失败),因此优先调起系统分享
+ * (分享面板中可"保存到文件"),不支持分享时退回普通下载,移动端附加提示。
+ */
+export async function downloadBinFile(
+  fileName: string,
+  data: BinaryData,
+): Promise<BinDownloadResult> {
   const blob = new Blob([toArrayBuffer(data)], {
     type: "application/octet-stream",
   });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+
+  const triggerDownload = () => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const nav = navigator as Navigator & {
+    canShare?: (data: ShareData) => boolean;
+  };
+  if (nav.canShare) {
+    const file = new File([blob], fileName, {
+      type: "application/octet-stream",
+    });
+    if (nav.canShare({ files: [file] })) {
+      try {
+        await nav.share({ files: [file], title: fileName });
+        return "shared";
+      } catch (e: any) {
+        if (e && e.name === "AbortError") return "cancelled";
+        // 分享调起失败,退回普通下载
+      }
+    }
+  }
+
+  triggerDownload();
+
+  if (/Android|iPhone|iPad|Mobi/i.test(navigator.userAgent)) {
+    window.alert(
+      "已尝试下载。如果没有生成文件(常见于 App 内置浏览器),请复制本页地址到系统浏览器打开后重新下载。",
+    );
+  }
+  return "downloaded";
 }

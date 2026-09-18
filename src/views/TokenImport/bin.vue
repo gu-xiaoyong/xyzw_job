@@ -150,7 +150,7 @@ const initName = (fileName: string) => {
   };
 };
 
-const handleDownload = (roleInfo: any) => {
+const handleDownload = async (roleInfo: any) => {
   if (!originalBinData.value) {
     message.error("Bin数据丢失，请重新上传");
     return;
@@ -158,8 +158,12 @@ const handleDownload = (roleInfo: any) => {
   try {
     const newBinBuffer = buildRoleBin(originalBinData.value, roleInfo.serverId);
     const fileName = getRoleBinFileName(roleInfo);
-    downloadBinFile(fileName, newBinBuffer);
-    message.success(`已开始下载: ${fileName}`);
+    const result = await downloadBinFile(fileName, newBinBuffer);
+    if (result === "shared") {
+      message.success("已调起系统分享，可选择保存到文件或发送给其他设备");
+    } else if (result === "downloaded") {
+      message.success(`已开始下载: ${fileName}`);
+    }
   } catch (e: any) {
     console.error("下载失败", e);
     message.error("下载失败: " + e.message);
