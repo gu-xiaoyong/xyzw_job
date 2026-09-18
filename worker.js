@@ -110,6 +110,39 @@ export default {
       }
     }
 
+    // Stateless bin-file relay: binary carried in query string (base64url),
+    // served back as a standard attachment download. Used by App WebView
+    // environments that cannot save blob/object-url downloads.
+    if (url.pathname === '/api/bin-file') {
+      if (request.method === 'OPTIONS') {
+        return new Response(null, { headers: corsHeaders });
+      }
+      try {
+        const name = (url.searchParams.get('n') || 'token.bin').slice(0, 120);
+        const data = url.searchParams.get('d') || '';
+        if (!data || data.length > 90000) {
+          throw new Error('file data missing or too large');
+        }
+        const normalized = data.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+        const bin = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+        const asciiName = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+        return new Response(bin, {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/octet-stream',
+            'Content-Disposition': `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+            'Cache-Control': 'no-store',
+          },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message || 'invalid data' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     // Serve static assets (Cloudflare Pages)
     // If env.ASSETS is available (e.g. in Cloudflare Pages Functions), use it to fetch static assets
     if (env.ASSETS) {
