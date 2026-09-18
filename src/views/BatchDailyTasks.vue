@@ -2474,6 +2474,30 @@
       </div>
     </n-modal>
 
+    <!-- Export text fallback modal: APK/手机 WebView 无法直接保存 blob 下载文件 -->
+    <n-modal
+      v-model:show="showExportTextModal"
+      preset="card"
+      title="导出配置内容"
+      style="width: 92%; max-width: 600px"
+    >
+      <n-space vertical>
+        <div style="font-size: 13px; color: #666">
+          当前环境无法直接生成下载文件。可复制以下内容,自行粘贴保存为
+          .json 文件,之后可通过"导入配置"恢复。
+        </div>
+        <n-input
+          :value="exportJsonText"
+          type="textarea"
+          readonly
+          :rows="12"
+        />
+        <n-button type="primary" @click="copyExportText">
+          复制全部内容
+        </n-button>
+      </n-space>
+    </n-modal>
+
     <!-- War Guess Modal -->
     <n-modal
       v-model:show="showWarGuessModal"
@@ -3383,6 +3407,10 @@ const helperModalTitle = computed(() => {
 // Batch Settings State
 const showBatchSettingsModal = ref(false);
 
+// 导出配置兜底:无法下载文件时展示文本供复制
+const showExportTextModal = ref(false);
+const exportJsonText = ref("");
+
 const defaultDreamPurchaseList = [];
 for (const merchantId in goldItemsConfig) {
   goldItemsConfig[merchantId].forEach((index) => {
@@ -3874,7 +3902,7 @@ const deselectAllTasks = () => {
 // ======================
 
 // Export all tokens and scheduled tasks configuration
-const exportConfig = () => {
+const exportConfig = async () => {
   try {
     // Get all valid token IDs
     const validTokenIds = new Set(tokens.value.map((t) => t.id));
@@ -3950,17 +3978,39 @@ const exportConfig = () => {
       tokenSettings: tokenSettings,
     };
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: "application/json",
-    });
+    const json = JSON.stringify(exportData, null, 2);
+    const filename = `xyzw_config_${new Date().toISOString().slice(0, 10)}.json`;
+    const blob = new Blob([json], { type: "application/json" });
+
+    // 手机/APK 的 WebView 无法把 blob 下载落盘:
+    // 优先调起系统分享(可"保存到文件"),不支持时展示文本供复制
+    const file = new File([blob], filename, { type: "application/json" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: filename });
+        message.success("已调起系统分享,可选择保存到文件或发送给其他设备");
+      } catch (e) {
+        if (e && e.name === "AbortError") return;
+        exportJsonText.value = json;
+        showExportTextModal.value = true;
+      }
+      return;
+    }
+
+    if (/Android|iPhone|iPad|Mobi/i.test(navigator.userAgent)) {
+      exportJsonText.value = json;
+      showExportTextModal.value = true;
+      return;
+    }
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `xyzw_config_${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 
     message.success(
       `导出成功: ${exportData.tokens.length} 个账号, ${exportData.scheduledTasks.length} 个定时任务`,
@@ -3968,6 +4018,36 @@ const exportConfig = () => {
   } catch (error) {
     console.error("Export failed:", error);
     message.error("导出失败: " + error.message);
+  }
+};
+
+// 复制导出文本(clipboard API 不可用时退回 execCommand)
+const copyExportText = async () => {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(exportJsonText.value);
+      message.success("配置内容已复制到剪贴板");
+      return;
+    }
+  } catch (e) {
+    // 继续尝试 execCommand 方式
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = exportJsonText.value;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    if (ok) {
+      message.success("配置内容已复制到剪贴板");
+    } else {
+      message.info("自动复制失败,请长按文本框手动全选复制");
+    }
+  } catch (e) {
+    message.info("自动复制失败,请长按文本框手动全选复制");
   }
 };
 
