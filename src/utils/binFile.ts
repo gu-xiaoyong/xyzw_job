@@ -1,4 +1,5 @@
 import { g_utils } from "@/utils/bonProtocol";
+import { toBase64Url } from "@/utils/encoding";
 
 type BinaryData = ArrayBuffer | Uint8Array;
 
@@ -14,19 +15,6 @@ function toArrayBuffer(data: BinaryData): ArrayBuffer {
     data.byteOffset,
     data.byteOffset + data.byteLength,
   ) as ArrayBuffer;
-}
-
-function toBase64Url(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
 }
 
 /**

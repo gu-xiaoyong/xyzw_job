@@ -2482,15 +2482,36 @@
       style="width: 92%; max-width: 600px"
     >
       <n-space vertical>
+        <template v-if="exportRelayUrl">
+          <div style="font-size: 13px; color: #666">
+            手机上无法直接下载?复制下方链接,用系统浏览器(如
+            Chrome)打开即可下载 .json 文件:
+          </div>
+          <n-input
+            :value="exportRelayUrl"
+            type="textarea"
+            readonly
+            :rows="3"
+          />
+          <n-space>
+            <n-button type="primary" @click="copyExportLink">
+              复制链接
+            </n-button>
+            <n-button @click="openExportLink"> 尝试下载 </n-button>
+          </n-space>
+          <n-divider style="margin: 4px 0">
+            <span style="font-size: 12px; color: #999">或复制文本内容</span>
+          </n-divider>
+        </template>
         <div style="font-size: 13px; color: #666">
-          当前环境无法直接生成下载文件。可复制以下内容,自行粘贴保存为
+          也可复制以下内容,自行粘贴保存为
           .json 文件,之后可通过"导入配置"恢复。
         </div>
         <n-input
           :value="exportJsonText"
           type="textarea"
           readonly
-          :rows="12"
+          :rows="10"
         />
         <n-button type="primary" @click="copyExportText">
           复制全部内容
@@ -2870,6 +2891,7 @@ import { preloadQuestions } from "@/utils/studyQuestionsFromJSON.js";
 import { useMessage } from "naive-ui";
 import { Settings } from "@vicons/ionicons5";
 import { DEFAULT_WEIRD_TOWER_MAX_CLIMB } from "@/utils/towerClimbLimit.js";
+import { toBase64Url } from "@/utils/encoding";
 
 // Import batch task modules
 import {
@@ -3410,6 +3432,8 @@ const showBatchSettingsModal = ref(false);
 // 导出配置兜底:无法下载文件时展示文本供复制
 const showExportTextModal = ref(false);
 const exportJsonText = ref("");
+// 中转下载链接(真正的 https 附件下载,可复制到系统浏览器打开)
+const exportRelayUrl = ref("");
 
 const defaultDreamPurchaseList = [];
 for (const merchantId in goldItemsConfig) {
@@ -3982,6 +4006,20 @@ const exportConfig = async () => {
     const filename = `xyzw_config_${new Date().toISOString().slice(0, 10)}.json`;
     const blob = new Blob([json], { type: "application/json" });
 
+    // 生成中转下载链接(数据编码在链接里,由 /api/bin-file 以附件形式返回)
+    exportRelayUrl.value = "";
+    try {
+      if (
+        location.protocol.startsWith("http") &&
+        blob.size <= 60 * 1024 &&
+        typeof btoa === "function"
+      ) {
+        exportRelayUrl.value = `${location.origin}/api/bin-file?n=${encodeURIComponent(filename)}&d=${toBase64Url(await blob.arrayBuffer())}`;
+      }
+    } catch (e) {
+      exportRelayUrl.value = "";
+    }
+
     // 手机/APK 的 WebView 无法把 blob 下载落盘:
     // 优先调起系统分享(可"保存到文件"),不支持时展示文本供复制
     const file = new File([blob], filename, { type: "application/json" });
@@ -4021,34 +4059,51 @@ const exportConfig = async () => {
   }
 };
 
-// 复制导出文本(clipboard API 不可用时退回 execCommand)
-const copyExportText = async () => {
+// 复制文本到剪贴板(clipboard API 不可用时退回 execCommand)
+const copyTextWithFeedback = async (text) => {
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(exportJsonText.value);
-      message.success("配置内容已复制到剪贴板");
-      return;
+      await navigator.clipboard.writeText(text);
+      return true;
     }
   } catch (e) {
     // 继续尝试 execCommand 方式
   }
   try {
     const ta = document.createElement("textarea");
-    ta.value = exportJsonText.value;
+    ta.value = text;
     ta.style.position = "fixed";
     ta.style.opacity = "0";
     document.body.appendChild(ta);
     ta.select();
     const ok = document.execCommand("copy");
     document.body.removeChild(ta);
-    if (ok) {
-      message.success("配置内容已复制到剪贴板");
-    } else {
-      message.info("自动复制失败,请长按文本框手动全选复制");
-    }
+    return ok;
   } catch (e) {
+    return false;
+  }
+};
+
+const copyExportText = async () => {
+  const ok = await copyTextWithFeedback(exportJsonText.value);
+  if (ok) {
+    message.success("配置内容已复制到剪贴板");
+  } else {
     message.info("自动复制失败,请长按文本框手动全选复制");
   }
+};
+
+const copyExportLink = async () => {
+  const ok = await copyTextWithFeedback(exportRelayUrl.value);
+  if (ok) {
+    message.success("链接已复制,请用系统浏览器打开下载");
+  } else {
+    message.info("自动复制失败,请长按链接手动复制");
+  }
+};
+
+const openExportLink = () => {
+  location.href = exportRelayUrl.value;
 };
 
 // Import tokens and scheduled tasks configuration
