@@ -122,10 +122,37 @@ export function createTasksApex(deps) {
           type: "info",
         });
 
-        // 5. 遍历对阵，选助威最高的队伍竞猜
+        // 5. 遍历对阵，选助威/投票数更高的队伍竞猜
         let successCount = 0;
         let skipCount = 0;
         let failCount = 0;
+        let dumpedRawGroup = false;
+
+        // 票数字段自适应:不同阶段/版本字段名可能不同,字符串数字也兼容
+        const VOTE_FIELDS = [
+          "cheerCnt",
+          "cheerNum",
+          "cheerCount",
+          "guessCnt",
+          "guessNum",
+          "guessCount",
+          "voteCnt",
+          "voteNum",
+          "voteCount",
+          "supportCnt",
+          "betCnt",
+        ];
+        const getVoteCount = (team) => {
+          if (!team) return undefined;
+          for (const f of VOTE_FIELDS) {
+            const v = team[f];
+            if (typeof v === "number") return v;
+            if (typeof v === "string" && v !== "" && !Number.isNaN(Number(v))) {
+              return Number(v);
+            }
+          }
+          return undefined;
+        };
 
         for (const group of allGroups) {
           if (shouldStop.value) break;
@@ -133,21 +160,45 @@ export function createTasksApex(deps) {
           const [team0, team1] = group;
           if (!team0 || !team1) continue;
 
+          const vote0 = getVoteCount(team0);
+          const vote1 = getVoteCount(team1);
+
           // 两队都已竞猜则跳过
           if (guessedTeamIds.has(team0.teamId) && guessedTeamIds.has(team1.teamId)) {
             skipCount++;
             continue;
           }
 
-          // 选助威数更高的队伍
           let pick;
           if (guessedTeamIds.has(team0.teamId)) {
             pick = team1;
           } else if (guessedTeamIds.has(team1.teamId)) {
             pick = team0;
+          } else if (vote0 !== undefined && vote1 !== undefined) {
+            // 跟随票数多的一边(票数相同取主队)
+            pick = vote0 >= vote1 ? team0 : team1;
           } else {
-            pick = team0.cheerCnt >= team1.cheerCnt ? team0 : team1;
+            // 无法识别票数字段:打印原始数据便于排查,不盲猜
+            if (!dumpedRawGroup) {
+              dumpedRawGroup = true;
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 对阵票数字段无法识别,原始数据: ${JSON.stringify(group).slice(0, 600)}`,
+                type: "warning",
+              });
+            }
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 无法识别 ${team0.name} 与 ${team1.name} 的票数,跳过该组`,
+              type: "warning",
+            });
+            failCount++;
+            continue;
           }
+
+          const pickVote = pick === team0 ? vote0 : vote1;
+          const other = pick === team0 ? team1 : team0;
+          const otherVote = pick === team0 ? vote1 : vote0;
 
           try {
             await tokenStore.sendMessageWithPromise(
@@ -160,7 +211,7 @@ export function createTasksApex(deps) {
             successCount++;
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `${token.name} 竞猜 ${pick.name} (${pick.teamId}) 助威:${pick.cheerCnt} ✓`,
+              message: `${token.name} 竞猜 ${pick.name}(${pickVote ?? "?"}票) 胜过 ${other.name}(${otherVote ?? "?"}票) ✓`,
               type: "success",
             });
           } catch (err) {
