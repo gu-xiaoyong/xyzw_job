@@ -140,6 +140,7 @@
 </template>
 
 <script setup>
+import { copyText } from "@/utils/fileRelay";
 import { ref, h } from "vue";
 import { useMessage, useDialog, NIcon } from "naive-ui";
 import { gameTokens } from "@/stores/tokenStore";
@@ -423,18 +424,11 @@ const editToken = (roleId, tokenData) => {
 
 // 复制Token到剪贴板
 const copyToken = async (token) => {
-  try {
-    await navigator.clipboard.writeText(token);
+  const ok = await copyText(token);
+  if (ok) {
     message.success("Token已复制到剪贴板");
-  } catch (error) {
-    // 降级方案
-    const textArea = document.createElement("textarea");
-    textArea.value = token;
-    document.body.appendChild(textArea);
-    textArea.select();
-    document.execCommand("copy");
-    document.body.removeChild(textArea);
-    message.success("Token已复制到剪贴板");
+  } else {
+    message.error("复制失败,请长按Token文本手动复制");
   }
 };
 

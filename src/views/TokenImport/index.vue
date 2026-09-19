@@ -755,6 +755,7 @@ import {
 import { $emit } from "@/stores/events/index.ts";
 import useIndexedDB from "@/hooks/useIndexedDB";
 import { prepareMultiGameLaunch } from "@/utils/gameLauncher";
+import { copyText } from "@/utils/fileRelay";
 import {
   pruneTokenSelection,
   selectAllTokenIds,
@@ -1371,11 +1372,11 @@ const saveEdit = async () => {
 };
 
 const copyToken = async (token) => {
-  try {
-    await navigator.clipboard.writeText(token.token);
+  const ok = await copyText(token.token);
+  if (ok) {
     message.success("Token已复制到剪贴板");
-  } catch (error) {
-    message.error("复制失败");
+  } else {
+    message.error("复制失败,请长按Token文本手动复制");
   }
 };
 

@@ -1247,6 +1247,7 @@
  * 通过 role_gettargetteam 获取成员在营地挑战中真实生效的 1~5 号站位布阵阵容。
  */
 
+import { copyText } from "@/utils/fileRelay";
 import { computed, h, onMounted, ref, watch } from "vue";
 import {
   useMessage,
@@ -1740,19 +1741,12 @@ const attendanceStats = computed(() => {
 });
 
 // 通用剪贴板复制工具
-const copyToClipboard = (text: string, successMsg: string) => {
-  if (navigator?.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(() => {
-      message.success(successMsg);
-    });
-  } else {
-    const input = document.createElement("textarea");
-    input.value = text;
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand("copy");
-    document.body.removeChild(input);
+const copyToClipboard = async (text: string, successMsg: string) => {
+  const ok = await copyText(text);
+  if (ok) {
     message.success(successMsg);
+  } else {
+    message.error("复制失败,请长按文本手动复制");
   }
 };
 

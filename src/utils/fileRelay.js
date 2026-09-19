@@ -79,3 +79,42 @@ export function copyTextSyncFirst(text) {
 
 export const isMobileEnv = () =>
   /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent);
+
+/**
+ * 复制文本:先在用户手势内同步 execCommand(WebView 必需),失败再退回 async clipboard。
+ * @returns {Promise<boolean>} 是否复制成功
+ */
+export async function copyText(text) {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-9999px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    let copied = false;
+    try {
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      copied = document.execCommand("copy");
+    } catch (e) {
+      copied = false;
+    } finally {
+      document.body.removeChild(ta);
+    }
+    if (copied) return true;
+  } catch (e) {
+    // fallthrough
+  }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return false;
+}

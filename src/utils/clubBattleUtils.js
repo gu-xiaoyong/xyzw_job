@@ -7,6 +7,7 @@
  * 如果今天是周六，返回今天的日期；否则返回上周六的日期
  * @returns {string} 格式化的日期字符串 YYYY/MM/DD
  */
+import { copyText } from "./fileRelay";
 import * as XLSX from "xlsx";
 
 export function getLastSaturday() {
@@ -509,31 +510,13 @@ export function formatBattleRecordsForExport(roleDetailsList, queryDate) {
   return lines.join("\n");
 }
 /**
- * 复制文本到剪贴板
+ * 复制文本到剪贴板(WebView 兼容:同步 execCommand 优先)
  * @param {string} text - 要复制的文本
  * @returns {Promise<void>}
  */
 export async function copyToClipboard(text) {
-  if (navigator.clipboard && window.isSecureContext) {
-    // 现代浏览器
-    await navigator.clipboard.writeText(text);
-  } else {
-    // 降级方案
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-    textArea.style.position = "fixed";
-    textArea.style.left = "-999999px";
-    textArea.style.top = "-999999px";
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-
-    try {
-      document.execCommand("copy");
-    } catch (err) {
-      throw new Error("复制失败");
-    } finally {
-      textArea.remove();
-    }
+  const ok = await copyText(text);
+  if (!ok) {
+    throw new Error("复制失败");
   }
 }
