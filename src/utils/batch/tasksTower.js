@@ -19,44 +19,53 @@ import { normalizeWeirdTowerMaxClimb } from "../towerClimbLimit.js";
  * @param {Function} onLog - 日志回调 (message, type) => void
  * @returns {Promise<number>} 实际补领的章节数
  */
-async function claimPendingEvoTowerRewards(tokenStore, tokenId, evoTower, onLog) {
-  const towerId = Number(evoTower?.towerId ?? 0);
-  const rewardTowerId = Number(evoTower?.rewardTowerId ?? 0);
-  if (!towerId) {
-    return 0;
-  }
-
-  const clearedChapter = Math.floor(towerId / 10);
-  let pending = clearedChapter - rewardTowerId;
-  if (pending <= 0) {
-    return 0;
-  }
-
-  onLog?.(
-    `检测到 ${pending} 个未领取的章节通关奖励（已通关第 ${clearedChapter} 章，已领至第 ${rewardTowerId} 章），先行补领`,
-    "warning",
-  );
-
+async function claimPendingEvoTowerRewards(tokenStore, tokenId, onLog) {
   let claimed = 0;
-  while (pending > 0) {
+  for (let i = 0; i < 40; i++) {
+    let info;
     try {
-      const res = await tokenStore.sendMessageWithPromise(
+      info = await tokenStore.sendMessageWithPromise(
+        tokenId,
+        "evotower_getinfo",
+        {},
+        5000,
+      );
+    } catch (e) {
+      onLog?.(`读取怪异塔信息失败: ${e?.message || e}`, "error");
+      return claimed;
+    }
+    const tower = info?.evoTower || {};
+    const towerId = Number(tower.towerId ?? 0);
+    const rewardTowerId = Number(tower.rewardTowerId ?? 0);
+    if (!towerId) return claimed;
+
+    // 以服务器状态为准:已通关章节数 - 已领奖章节数
+    const pending = Math.floor(towerId / 10) - rewardTowerId;
+    if (pending <= 0) return claimed;
+
+    try {
+      await tokenStore.sendMessageWithPromise(
         tokenId,
         "evotower_claimreward",
         {},
         5000,
       );
       claimed++;
-      pending--;
-      onLog?.(`已领取第 ${res?.evoTower?.rewardTowerId ?? rewardTowerId + claimed} 章通关奖励`, "success");
+      onLog?.(
+        `已领取第 ${rewardTowerId + 1}/${Math.floor(towerId / 10)} 章通关奖励`,
+        "success",
+      );
       await new Promise((r) => setTimeout(r, 300));
     } catch (error) {
-      // 领奖失败则停止：继续爬塔只会持续返回 12200020
       onLog?.(
-        `领取章节奖励失败，已补领 ${claimed}/${claimed + pending} 个：${error?.message || error}`,
+        `领取章节奖励失败 (towerId=${towerId}, rewardTowerId=${rewardTowerId}): ${error?.message || error}`,
         "error",
       );
-      break;
+      onLog?.(
+        `怪异塔原始数据: ${JSON.stringify(tower).slice(0, 500)}`,
+        "warning",
+      );
+      return claimed;
     }
   }
   return claimed;
@@ -419,11 +428,8 @@ export function createTasksTower(deps) {
         });
 
         // 爬塔前先补领未领取的章节奖励，否则 evotower_readyfight 会被拒绝（12200020）
-        await claimPendingEvoTowerRewards(
-          tokenStore,
-          tokenId,
-          evotowerinfo1?.evoTower,
-          (message, type) => addLog({
+        await claimPendingEvoTowerRewards(tokenStore, tokenId, (message, type) =>
+          addLog({
             time: new Date().toLocaleTimeString(),
             message: `${token.name} ${message}`,
             type,
@@ -510,11 +516,8 @@ export function createTasksTower(deps) {
             // 通关章节奖励：以 rewardTowerId 为准判断是否有未领取的章节
             // （原按 (towerId % 10) + 1 === 1 判断，towerId 为 10 的整数倍时恒成立，
             //   会重复发送领奖命令，且无法感知历史未领取的章节）
-            await claimPendingEvoTowerRewards(
-              tokenStore,
-              tokenId,
-              evotowerinfo2?.evoTower,
-              (message, type) => addLog({
+            await claimPendingEvoTowerRewards(tokenStore, tokenId, (message, type) =>
+              addLog({
                 time: new Date().toLocaleTimeString(),
                 message: `${token.name} ${message}`,
                 type,
@@ -601,6 +604,15 @@ export function createTasksTower(deps) {
               message: `战斗出错: ${err.message} (重试 ${consecutiveFailures}/3)`,
               type: "warning",
             });
+
+            // "层次奖励未领取"会导致 readyfight 被拒,重试前先按服务器状态补领
+            await claimPendingEvoTowerRewards(tokenStore, tokenId, (message, type) =>
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} ${message}`,
+                type,
+              }),
+            );
 
             if (consecutiveFailures >= 3) {
               stopReason = "连续失败次数过多";
