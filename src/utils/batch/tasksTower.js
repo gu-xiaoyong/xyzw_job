@@ -435,10 +435,14 @@ export function createTasksTower(deps) {
           weirdTowerMaxClimb?.value ?? weirdTowerMaxClimb,
         );
         let consecutiveFailures = 0;
+        let lastFloor = Number(evotowerinfo1?.evoTower?.towerId ?? 0);
+        let noProgress = 0;
+        let stopReason = "";
+        let freeEnergyTried = false;
 
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `${token.name} 本次最多爬怪异塔 ${MAX_CLIMB} 次`,
+          message: `${token.name} 当前第 ${lastFloor} 层，本次最多爬 ${MAX_CLIMB} 次`,
           type: "info",
         });
 
@@ -463,11 +467,6 @@ export function createTasksTower(deps) {
 
             count++;
             consecutiveFailures = 0;
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `${token.name} 爬怪异塔第 ${count} 次`,
-              type: "info",
-            });
 
             await new Promise((r) => setTimeout(r, 500));
 
@@ -522,7 +521,8 @@ export function createTasksTower(deps) {
               }),
             );
 
-            // 刷新能量
+            // 刷新能量与层数
+            let nowFloor = lastFloor;
             try {
               const evotowerinfoRefresh1 = await tokenStore.sendMessageWithPromise(
                 tokenId,
@@ -531,8 +531,68 @@ export function createTasksTower(deps) {
                 5000,
               );
               currentEnergy = evotowerinfoRefresh1?.evoTower?.energy || 0;
+              nowFloor = Number(evotowerinfoRefresh1?.evoTower?.towerId ?? lastFloor);
             } catch (e) {
               // 忽略刷新失败
+            }
+
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 第 ${count} 次战斗完成，当前第 ${nowFloor} 层 (剩余体力 ${currentEnergy})`,
+              type: "info",
+            });
+
+            // 卡层检测:战斗执行了但层数没推进,大概率打不过
+            if (nowFloor > lastFloor) {
+              noProgress = 0;
+              lastFloor = nowFloor;
+            } else {
+              noProgress++;
+              if (noProgress >= 3) {
+                stopReason = `连续 3 次未能通过第 ${lastFloor} 层（可能战力不足）`;
+                break;
+              }
+            }
+
+            // 体力耗尽时,尝试领取怪异塔免费道具补充一次
+            if (
+              currentEnergy <= 0 &&
+              count < MAX_CLIMB &&
+              !shouldStop.value &&
+              !freeEnergyTried
+            ) {
+              freeEnergyTried = true;
+              try {
+                const freeEnergyResult = await tokenStore.sendMessageWithPromise(
+                  tokenId,
+                  "mergebox_getinfo",
+                  { actType: 1 },
+                  5000,
+                );
+                const freeEnergy = freeEnergyResult?.mergeBox?.freeEnergy || 0;
+                if (freeEnergy > 0) {
+                  await tokenStore.sendMessageWithPromise(
+                    tokenId,
+                    "mergebox_claimfreeenergy",
+                    { actType: 1 },
+                    5000,
+                  );
+                  addLog({
+                    time: new Date().toLocaleTimeString(),
+                    message: `${token.name} 体力耗尽，已领取免费道具 x${freeEnergy}，重新检查体力`,
+                    type: "info",
+                  });
+                  const refreshed = await tokenStore.sendMessageWithPromise(
+                    tokenId,
+                    "evotower_getinfo",
+                    {},
+                    5000,
+                  );
+                  currentEnergy = refreshed?.evoTower?.energy || 0;
+                }
+              } catch (e) {
+                // 领取失败不影响主流程
+              }
             }
           } catch (err) {
             consecutiveFailures++;
@@ -543,9 +603,10 @@ export function createTasksTower(deps) {
             });
 
             if (consecutiveFailures >= 3) {
+              stopReason = "连续失败次数过多";
               addLog({
                 time: new Date().toLocaleTimeString(),
-                message: `${token.name} 连续失败次数过多，停止爬怪异塔`,
+                message: `${token.name} ${stopReason}（第 ${lastFloor} 层附近），停止爬怪异塔`,
                 type: "error",
               });
               break;
@@ -575,9 +636,18 @@ export function createTasksTower(deps) {
           );
         }
         tokenStatus.value[tokenId] = "completed";
+        const finishReason =
+          stopReason ||
+          (shouldStop.value
+            ? "手动停止"
+            : currentEnergy <= 0
+              ? "体力耗尽"
+              : count >= MAX_CLIMB
+                ? `达到设定上限 ${MAX_CLIMB} 次`
+                : "结束");
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `=== ${token.name} 爬怪异塔结束，共 ${count} 次 ===`,
+          message: `=== ${token.name} 爬怪异塔结束: 本次战斗 ${count} 次，当前第 ${lastFloor} 层（${finishReason}）===`,
           type: "success",
         });
       } catch (error) {
