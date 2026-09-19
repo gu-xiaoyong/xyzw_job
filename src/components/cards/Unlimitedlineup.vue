@@ -79,11 +79,17 @@
                 'drag-over': dragOverPosition === hero.position,
               }"
               draggable="true"
+              :data-position="hero.position"
               @dragstart="onDragStart($event, hero)"
               @dragend="onDragEnd"
               @dragover.prevent="onDragOver($event, hero)"
               @dragleave="onDragLeave"
               @drop="onDrop($event, hero)"
+              @contextmenu.prevent
+              @touchstart="onTouchStart($event, hero)"
+              @touchmove="onTouchMove"
+              @touchend="onTouchEnd"
+              @touchcancel="onTouchEnd"
             >
               <div class="hero-position">{{ hero.position + 1 }}</div>
               <div class="hero-left" @click="showHeroRefineModal(hero)">
@@ -1247,18 +1253,8 @@ const onDragLeave = () => {
   dragOverPosition.value = null;
 };
 
-const onDrop = (event, targetHero) => {
-  event.preventDefault();
-  dragOverPosition.value = null;
-
-  if (!draggedHeroId.value || draggedHeroId.value === targetHero.heroId) {
-    return;
-  }
-
-  const draggedHero = editingHeroes.value.find(
-    (h) => h.heroId === draggedHeroId.value,
-  );
-  if (!draggedHero) return;
+const performSwap = (draggedHero, targetHero) => {
+  if (!draggedHero || draggedHero.heroId === targetHero.heroId) return false;
 
   if (Object.keys(editingTeamHeroes.value).length === 0) {
     currentTeamHeroes.value.forEach((h) => {
@@ -1283,8 +1279,88 @@ const onDrop = (event, targetHero) => {
   message.success(
     `已将 ${getHeroName(draggedHero.heroId)} 与 ${getHeroName(targetHero.heroId)} 交换位置`,
   );
+  return true;
+};
 
+const onDrop = (event, targetHero) => {
+  event.preventDefault();
+  dragOverPosition.value = null;
+
+  if (!draggedHeroId.value || draggedHeroId.value === targetHero.heroId) {
+    return;
+  }
+
+  const draggedHero = editingHeroes.value.find(
+    (h) => h.heroId === draggedHeroId.value,
+  );
+  if (!draggedHero) return;
+
+  performSwap(draggedHero, targetHero);
   draggedHeroId.value = null;
+};
+
+// 触屏长按拖拽(HTML5 drag 事件在手机上不触发)
+const touchState = ref(null);
+
+const findHeroFromPoint = (x, y) => {
+  const el = document.elementFromPoint(x, y);
+  const item = el && el.closest ? el.closest(".hero-item") : null;
+  if (!item || item.dataset.position === undefined) return null;
+  const pos = Number(item.dataset.position);
+  return editingHeroes.value.find((h) => h.position === pos) || null;
+};
+
+const onTouchStart = (event, hero) => {
+  if (event.touches.length !== 1) return;
+  const t = event.touches[0];
+  const st = {
+    hero,
+    startX: t.clientX,
+    startY: t.clientY,
+    active: false,
+    timer: setTimeout(() => {
+      st.active = true;
+      draggedHeroId.value = hero.heroId;
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, 300),
+  };
+  touchState.value = st;
+};
+
+const onTouchMove = (event) => {
+  const st = touchState.value;
+  if (!st) return;
+  const t = event.touches[0];
+  if (!st.active) {
+    // 长按前位移过大视为滚动,取消拖拽意图
+    const dx = t.clientX - st.startX;
+    const dy = t.clientY - st.startY;
+    if (Math.hypot(dx, dy) > 12) {
+      clearTimeout(st.timer);
+      touchState.value = null;
+    }
+    return;
+  }
+  event.preventDefault();
+  const target = findHeroFromPoint(t.clientX, t.clientY);
+  dragOverPosition.value = target ? target.position : null;
+};
+
+const onTouchEnd = (event) => {
+  const st = touchState.value;
+  if (!st) return;
+  clearTimeout(st.timer);
+  touchState.value = null;
+  if (st.active) {
+    event.preventDefault();
+    const t = event.changedTouches[0];
+    const target = findHeroFromPoint(t.clientX, t.clientY);
+    if (target && target.heroId !== st.hero.heroId) {
+      performSwap(st.hero, target);
+    }
+  }
+  draggedHeroId.value = null;
+  dragOverPosition.value = null;
 };
 
 const loadSavedLineups = () => {
@@ -2520,6 +2596,9 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
   background: var(--bg-primary);
   border-radius: var(--border-radius-small);
   padding: var(--spacing-xs) var(--spacing-sm);
