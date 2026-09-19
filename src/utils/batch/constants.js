@@ -65,6 +65,7 @@ export const availableTasks = [
   { label: "一键领取蟠桃园任务", value: "batchClaimPeachTasks" },
   { label: "一键扫荡灯神", value: "batchGenieSweep" },
   { label: "一键购买梦境商品", value: "batchBuyDreamItems" },
+  { label: "一键玄武赐福", value: "batchXuanwuBlessing" },
 ];
 
 // 月度任务目标
