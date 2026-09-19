@@ -144,6 +144,54 @@ export default {
       }
     }
 
+    // Temporary file relay: client POSTs bytes, worker caches them under a
+    // random id (Cache API, ~30min TTL) and returns a plain https download URL.
+    // Serves cases where the data exceeds URL-length limits (e.g. table images).
+    if (url.pathname === '/api/upload-file' && request.method === 'POST') {
+      try {
+        const name = (url.searchParams.get('n') || 'file.bin').slice(0, 120);
+        const body = await request.arrayBuffer();
+        if (!body || body.byteLength === 0) throw new Error('empty body');
+        if (body.byteLength > 8 * 1024 * 1024) {
+          throw new Error('file too large (max 8MB)');
+        }
+        const id = (crypto.randomUUID && crypto.randomUUID()) ||
+          String(Date.now()) + Math.random().toString(16).slice(2);
+        const relayUrl = `${url.origin}/api/relay-file/${id}`;
+        const asciiName = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+        const cachedResponse = new Response(body, {
+          headers: {
+            'Content-Type': 'application/octet-stream',
+            'Content-Disposition': `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+            'Cache-Control': 'public, max-age=1800',
+          },
+        });
+        await caches.default.put(new Request(relayUrl), cachedResponse);
+        return new Response(JSON.stringify({ url: relayUrl }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: e.message || 'upload failed' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    // Serve relayed files cached by /api/upload-file (download as attachment).
+    if (url.pathname.startsWith('/api/relay-file/') && request.method === 'GET') {
+      const cached = await caches.default.match(request);
+      if (cached) {
+        const headers = new Headers(cached.headers);
+        Object.entries(corsHeaders).forEach(([k, v]) => headers.set(k, v));
+        return new Response(cached.body, { status: 200, headers });
+      }
+      return new Response('文件不存在或已过期,请重新生成下载链接', {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'text/plain; charset=utf-8' },
+      });
+    }
+
     // Serve static assets (Cloudflare Pages)
     // If env.ASSETS is available (e.g. in Cloudflare Pages Functions), use it to fetch static assets
     if (env.ASSETS) {

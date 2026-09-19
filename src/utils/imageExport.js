@@ -3,12 +3,14 @@
  * 兼容处理移动端大图导出问题
  *
  * 手机/APK WebView 环境说明:
- * - Android WebView 没有 Web Share API,blob 下载也会被静默丢弃;
- * - 因此移动端在触发下载后,额外弹出图片预览兜底层:
- *   长按图片可"保存图片"(依赖封装的下载能力),不行则直接截图保存。
+ * - Android WebView 没有 Web Share API,blob 下载/长按保存也会被静默丢弃;
+ * - 因此移动端兜底弹层会自动把图片上传到后端换取一个普通 https 下载链接,
+ *   复制链接用系统浏览器打开即可保存;实在不行再截图。
  * @param {HTMLCanvasElement} canvas - canvas元素
  * @param {string} filename - 文件名
  */
+import { uploadForRelayUrl, copyTextSyncFirst, isMobileEnv } from "./fileRelay";
+
 export const downloadCanvasAsImage = (canvas, filename) => {
   try {
     // 优先尝试使用 toBlob，因为它处理大文件更有效率且不容易崩溃
@@ -70,16 +72,16 @@ const downloadBlob = (blob, filename, canvas) => {
   setTimeout(() => URL.revokeObjectURL(url), 100);
 
   // 移动端(尤其 App 内置 WebView)可能静默丢弃下载,弹出预览兜底
-  if (/Android|iPhone|iPad|Mobi/i.test(navigator.userAgent) && canvas) {
+  if (isMobileEnv() && canvas) {
     try {
-      showImageFallback(canvas.toDataURL('image/png'), filename);
+      showImageFallback(canvas.toDataURL('image/png'), filename, blob);
     } catch (e) {
       console.error('生成图片预览失败:', e);
     }
   }
 };
 
-const fallbackToDataURL = (canvas, filename) => {
+const fallbackToDataURL = async (canvas, filename) => {
   try {
     const imgUrl = canvas.toDataURL('image/png');
     const link = document.createElement('a');
@@ -89,8 +91,14 @@ const fallbackToDataURL = (canvas, filename) => {
     link.click();
     document.body.removeChild(link);
 
-    if (/Android|iPhone|iPad|Mobi/i.test(navigator.userAgent)) {
-      showImageFallback(imgUrl, filename);
+    if (isMobileEnv()) {
+      let blob = null;
+      try {
+        blob = await (await fetch(imgUrl)).blob();
+      } catch (e) {
+        // 预览兜底不依赖 blob,获取失败仍展示预览
+      }
+      showImageFallback(imgUrl, filename, blob);
     }
   } catch (e) {
     console.error('DataURL导出失败:', e);
@@ -99,9 +107,9 @@ const fallbackToDataURL = (canvas, filename) => {
 };
 
 /**
- * 图片导出兜底弹层:预览图片 + 长按保存提示,保证手机上至少可以通过截图留存。
+ * 图片导出兜底弹层:预览图片 + 自动生成 https 下载链接 + 长按/截图提示。
  */
-const showImageFallback = (dataUrl, filename) => {
+const showImageFallback = (dataUrl, filename, blob) => {
   const existing = document.getElementById('image-export-fallback');
   if (existing) existing.remove();
 
@@ -121,7 +129,7 @@ const showImageFallback = (dataUrl, filename) => {
   const desc = document.createElement('div');
   desc.style.cssText = 'line-height:1.6;margin-bottom:10px;color:#555;';
   desc.textContent =
-    '当前环境可能无法直接保存文件。可长按下方图片选择"保存图片";若没有该选项,请对本页截图保存。';
+    '当前环境可能无法直接保存文件。可复制下方链接,用系统浏览器(如 Chrome)打开即可保存图片;或对预览图截图保存。';
 
   const img = document.createElement('img');
   img.src = dataUrl;
@@ -129,8 +137,17 @@ const showImageFallback = (dataUrl, filename) => {
   img.style.cssText =
     'width:100%;height:auto;border:1px solid #eee;border-radius:8px;display:block;';
 
+  const status = document.createElement('div');
+  status.textContent = '正在生成下载链接...';
+  status.style.cssText = 'margin-top:10px;font-size:13px;color:#888;';
+
+  const linkBox = document.createElement('textarea');
+  linkBox.readOnly = true;
+  linkBox.style.cssText =
+    'width:100%;height:64px;box-sizing:border-box;font-size:12px;padding:8px;border-radius:8px;border:1px solid #ddd;resize:none;display:none;margin-top:6px;';
+
   const row = document.createElement('div');
-  row.style.cssText = 'display:flex;gap:8px;margin-top:12px;';
+  row.style.cssText = 'display:flex;gap:8px;margin-top:10px;';
 
   const mkBtn = (text, bg, color) => {
     const b = document.createElement('button');
@@ -139,24 +156,48 @@ const showImageFallback = (dataUrl, filename) => {
     return b;
   };
 
+  const copyBtn = mkBtn('复制链接', '#2080f0', '#fff');
+  copyBtn.style.display = 'none';
   const dlBtn = mkBtn('尝试下载', '#18a058', '#fff');
-  dlBtn.onclick = () => {
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  };
-
+  dlBtn.style.display = 'none';
   const closeBtn = mkBtn('关闭', '#eeeeee', '#555555');
+
+  let relayUrl = '';
+  copyBtn.onclick = () => {
+    if (!relayUrl) return;
+    if (copyTextSyncFirst(relayUrl)) {
+      copyBtn.textContent = '已复制';
+    } else {
+      linkBox.focus();
+      linkBox.select();
+      copyBtn.textContent = '请长按链接手动复制';
+    }
+    setTimeout(() => (copyBtn.textContent = '复制链接'), 2000);
+  };
+  dlBtn.onclick = () => {
+    if (relayUrl) location.href = relayUrl;
+  };
   closeBtn.onclick = () => wrap.remove();
 
-  row.append(dlBtn, closeBtn);
-  card.append(title, desc, img, row);
+  row.append(copyBtn, dlBtn, closeBtn);
+  card.append(title, desc, img, status, linkBox, row);
   wrap.appendChild(card);
   wrap.onclick = (e) => {
     if (e.target === wrap) wrap.remove();
   };
   document.body.appendChild(wrap);
+
+  // 自动上传换取普通 https 下载链接
+  (async () => {
+    relayUrl = await uploadForRelayUrl(filename, blob);
+    if (!relayUrl) {
+      status.textContent = '下载链接生成失败,可对预览图截图保存。';
+      return;
+    }
+    status.textContent = '链接 30 分钟内有效,用系统浏览器打开即可保存:';
+    linkBox.value = relayUrl;
+    linkBox.style.display = 'block';
+    copyBtn.style.display = '';
+    dlBtn.style.display = '';
+  })();
 };

@@ -2742,6 +2742,7 @@ import { useMessage } from "naive-ui";
 import { Settings } from "@vicons/ionicons5";
 import { DEFAULT_WEIRD_TOWER_MAX_CLIMB } from "@/utils/towerClimbLimit.js";
 import { toBase64Url } from "@/utils/encoding";
+import { uploadForRelayUrl } from "@/utils/fileRelay";
 
 // Import batch task modules
 import {
@@ -3822,15 +3823,15 @@ const exportConfig = async () => {
     const filename = `xyzw_config_${new Date().toISOString().slice(0, 10)}.json`;
     const blob = new Blob([json], { type: "application/json" });
 
-    // 生成中转下载链接(数据编码在链接里,由 /api/download-file 以附件形式返回)
+    // 生成中转下载链接:小文件直接编码进 URL,大文件走上传中转
     exportRelayUrl.value = "";
     try {
-      if (
-        location.protocol.startsWith("http") &&
-        blob.size <= 60 * 1024 &&
-        typeof btoa === "function"
-      ) {
-        exportRelayUrl.value = `${location.origin}/api/download-file?n=${encodeURIComponent(filename)}&d=${toBase64Url(await blob.arrayBuffer())}`;
+      if (location.protocol.startsWith("http") && typeof btoa === "function") {
+        if (blob.size <= 60 * 1024) {
+          exportRelayUrl.value = `${location.origin}/api/download-file?n=${encodeURIComponent(filename)}&d=${toBase64Url(await blob.arrayBuffer())}`;
+        } else if (blob.size <= 8 * 1024 * 1024) {
+          exportRelayUrl.value = await uploadForRelayUrl(filename, blob);
+        }
       }
     } catch (e) {
       exportRelayUrl.value = "";
