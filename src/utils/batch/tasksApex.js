@@ -631,8 +631,8 @@ export function createTasksApex(deps) {
         if (!getCmd || !tasks) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `${token.name} 未匹配到逐鹿盐山任务接口（协议需抓包确认），跳过领取`,
-            type: "info",
+            message: `${token.name} 未匹配到逐鹿盐山任务接口，需抓包确认：游戏内打开逐鹿盐山任务页并领取一次奖励，把抓到的命令名发我`,
+            type: "warning",
           });
           tokenStatus.value[tokenId] = "completed";
           return;
@@ -680,8 +680,8 @@ export function createTasksApex(deps) {
           } else if (!claimCmd && i >= 1) {
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `${token.name} 领取接口未匹配（协议需抓包确认），停止领取`,
-              type: "info",
+              message: `${token.name} 任务列表已获取，但领取接口未匹配，需抓包确认：游戏内领取一次任务奖励，把抓到的命令名发我`,
+              type: "warning",
             });
             break;
           }
