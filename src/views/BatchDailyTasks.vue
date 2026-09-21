@@ -454,32 +454,6 @@
                 </n-button>
               </n-space>
             </n-tab-pane>
-            <n-tab-pane name="baoku" tab="宝库">
-              <n-space>
-                <n-button
-                  size="small"
-                  @click="batchbaoku13"
-                  :disabled="
-                    isRunning ||
-                    selectedTokens.length === 0 ||
-                    !isbaokuActivityOpen
-                  "
-                >
-                  一键宝库前3层
-                </n-button>
-                <n-button
-                  size="small"
-                  @click="batchbaoku45"
-                  :disabled="
-                    isRunning ||
-                    selectedTokens.length === 0 ||
-                    !isbaokuActivityOpen
-                  "
-                >
-                  一键宝库4,5层
-                </n-button>
-              </n-space>
-            </n-tab-pane>
             <n-tab-pane name="weirdTower" tab="怪异塔">
               <n-space>
                 <n-input-number
@@ -2916,10 +2890,6 @@ const ismengjingActivityOpen = computed(() => {
   const day = new Date().getDay();
   return day === 0 || day === 1 || day === 3 || day === 4;
 });
-const isbaokuActivityOpen = computed(() => {
-  const day = new Date().getDay();
-  return day != 1 && day != 2;
-});
 const isarenaActivityOpen = computed(() => {
   const hour = new Date().getHours();
   return hour >= 6 && hour < 22;
@@ -3314,7 +3284,7 @@ const batchSettings = reactive({
   commandDelay: 500, // 命令间延迟
   taskDelay: 500, // 任务间延迟
   actionDelay: 300, // 一般操作延迟（开箱、钓鱼、招募等）
-  battleDelay: 500, // 战斗延迟（宝库、竞技场等）
+  battleDelay: 500, // 战斗延迟（竞技场等）
   refreshDelay: 1000, // 刷新延迟
   longDelay: 3000, // 长延迟（功法赠送等）
   // 其他配置
@@ -3430,7 +3400,6 @@ const taskGroupDefinitions = [
       "batchBuyDreamItems",
     ],
   },
-  { name: "baoku", label: "宝库", tasks: ["batchbaoku13", "batchbaoku45"] },
   {
     name: "weirdTower",
     label: "怪异塔",
@@ -4509,18 +4478,6 @@ const executeScheduledTask = async (task) => {
     // Execute selected tasks in parallel
     const taskPromises = task.selectedTasks.map(async (taskName) => {
       if (shouldStop.value) return;
-
-      if (
-        ["batchbaoku45", "batchbaoku13"].includes(taskName) &&
-        !isbaokuActivityOpen.value
-      ) {
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `跳过任务: ${availableTasks.find((t) => t.value === taskName)?.label || taskName} (不在宝库开放时间)`,
-          type: "warning",
-        });
-        return;
-      }
 
       if (
         ["batchmengjing", "batchBuyDreamItems"].includes(taskName) &&
@@ -5738,8 +5695,7 @@ const {
 } = tasksItem;
 
 const tasksDungeon = createTasksDungeon(createTaskDeps());
-const { batchbaoku13, batchbaoku45, batchmengjing, batchBuyDreamItems } =
-  tasksDungeon;
+const { batchmengjing, batchBuyDreamItems } = tasksDungeon;
 
 const tasksArena = createTasksArena(createTaskDeps());
 const { batcharenafight, batchTopUpFish, batchTopUpArena } = tasksArena;

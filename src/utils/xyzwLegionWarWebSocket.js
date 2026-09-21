@@ -636,11 +636,6 @@
        'evotowerinforesp': 'evotower_getinfo',
        'evotower_fightresp': 'evotower_fight',
      'item_openpackresp': 'item_openpack',
-       // 咸王宝库
-       'matchteam_getroleteaminforesp': 'matchteam_getroleteaminfo',
-       'bosstower_getinforesp': 'bosstower_getinfo',
-       'bosstower_startbossreso': 'bosstower_startboss',
-       'bosstower_startboxresp': 'bosstower_startbox',
        'discount_getdiscountinforesp': 'discount_getdiscountinfo',
        // 升星相关响应映射
        'hero_heroupgradestarresp': 'hero_heroupgradestar',
@@ -652,7 +647,6 @@
        'role_gettargetteamresp': 'role_gettargetteam',
        'activity_warorderclaimresp': 'activity_recyclewarorderrewardclaim',
        'arena_getarearankresp': 'arena_getarearank',
-       'bosstower_gethelprankresp': 'bosstower_gethelprank',
        // 特殊响应映射 - 有些命令有独立响应，有些用同步响应
        'task_claimdailyrewardresp': 'task_claimdailyreward',
        'task_claimweekrewardresp': 'task_claimweekreward',

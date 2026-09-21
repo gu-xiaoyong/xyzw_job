@@ -22,7 +22,6 @@ declare module 'vue' {
     ASpace: typeof import('@arco-design/web-vue')['Space']
     ATag: typeof import('@arco-design/web-vue')['Tag']
     AUpload: typeof import('@arco-design/web-vue')['Upload']
-    BossTower: typeof import('./src/components/Tower/BossTower.vue')['default']
     BottleHelperCard: typeof import('./src/components/cards/BottleHelperCard.vue')['default']
     BoxHelperCard: typeof import('./src/components/cards/BoxHelperCard.vue')['default']
     CampChallenge: typeof import('./src/components/Club/CampChallenge.vue')['default']

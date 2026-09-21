@@ -329,7 +329,6 @@ export function registerDefaultCommands(reg) {
     // 梦魇相关
     .register("nightmare_getroleinfo")
     .register("dungeon_selecthero")
-    .register("bosstower_gethelprank")
     .register("dungeon_buymerchant")
     // 活动/任务
     .register("activity_get")
@@ -393,11 +392,6 @@ export function registerDefaultCommands(reg) {
       isLocked: false,
     })
 
-    // 咸王宝库
-    .register("matchteam_getroleteaminfo")
-    .register("bosstower_getinfo")
-    .register("bosstower_startboss")
-    .register("bosstower_startbox")
     .register("discount_getdiscountinfo")
 
     // 换皮闯关相关
@@ -1150,11 +1144,6 @@ export class XyzwWebSocketClient {
       pearl_replaceskillresp: "pearl_replaceskill",
       pearl_exchangeskillresp: "pearl_exchangeskill",
       pearl_unloadskillresp: "pearl_unloadskill",
-      // 咸王宝库
-      matchteam_getroleteaminforesp: "matchteam_getroleteaminfo",
-      bosstower_getinforesp: "bosstower_getinfo",
-      bosstower_startbossresp: "bosstower_startboss",
-      bosstower_startboxresp: "bosstower_startbox",
       discount_getdiscountinforesp: "discount_getdiscountinfo",
       // 升星相关响应映射
       hero_heroupgradestarresp: "hero_heroupgradestar",
@@ -1182,7 +1171,6 @@ export class XyzwWebSocketClient {
       activity_lotteryresp: "activity_lottery",
       activity_rewardresp: "activity_claimsignreward",
       arena_getarearankresp: "arena_getarearank",
-      bosstower_gethelprankresp: "bosstower_gethelprank",
       // 功法相关响应映射
       legacy_getinforesp: "legacy_getinfo",
       legacy_claimhangupresp: "legacy_claimhangup",

@@ -80,8 +80,6 @@
 
     <!-- 消耗活动进度（提取组件） -->
     <ConsumptionProgressCard v-if="activeSection === 'tools'" />
-    <!-- 咸王宝库（提取组件） -->
-    <BossTower v-if="activeSection === 'tools'" />
     <!-- 俱乐部排位（暂时隐藏） -->
     <div
       class="status-card legion-match"
@@ -386,7 +384,6 @@ import ConsumptionProgressCard from "./cards/ConsumptionProgressCard.vue";
 import RefineHelperCard from "./cards/RefineHelperCard.vue";
 import TowerStatus from "./Tower/TowerStatus.vue";
 import WeirdTowerStatus from "./Tower/WeirdTowerStatus.vue";
-import BossTower from "./Tower/BossTower.vue";
 import PeachInfo from "./Club/PeachInfo.vue";
 import PeachInfoV2 from "./Club/PeachInfoV2.vue";
 import ServerRankList from "./cards/ServerRankListPageCard.vue";
