@@ -367,12 +367,33 @@ export function createTasksStore(deps) {
           tokenStatus.value[tokenId] = "completed";
         }
       } catch (error) {
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 黑市采购过程出错: ${error.message}`,
-          type: "error",
-        });
-        tokenStatus.value[tokenId] = "failed";
+        console.error(error);
+        // 小号（等级<4001）黑市未解锁，采购失败属正常情况，不打印错误日志
+        let isAltAccount = false;
+        try {
+          const roleInfo = await tokenStore.sendMessageWithPromise(
+            tokenId,
+            "role_getroleinfo",
+            {},
+            8000,
+          );
+          const level = roleInfo?.role?.level;
+          if (level !== undefined && Number(level) < 4001) {
+            isAltAccount = true;
+          }
+        } catch {
+          // 取不到等级时按普通失败处理
+        }
+        if (isAltAccount) {
+          tokenStatus.value[tokenId] = "completed";
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 黑市采购过程出错: ${error.message}`,
+            type: "error",
+          });
+        }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
         releaseConnectionSlot();

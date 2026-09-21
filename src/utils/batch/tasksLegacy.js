@@ -69,12 +69,32 @@ export function createTasksLegacy(deps) {
         tokenStatus.value[tokenId] = "completed";
       } catch (error) {
         console.error(error);
-        tokenStatus.value[tokenId] = "failed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `=== ${token.name} 领取功法残卷失败: ${error.message || "未知错误"}`,
-          type: "error",
-        });
+        // 小号（等级<4001）功法未解锁，领取失败属正常情况，不打印错误日志
+        let isAltAccount = false;
+        try {
+          const roleInfo = await tokenStore.sendMessageWithPromise(
+            tokenId,
+            "role_getroleinfo",
+            {},
+            8000,
+          );
+          const level = roleInfo?.role?.level;
+          if (level !== undefined && Number(level) < 4001) {
+            isAltAccount = true;
+          }
+        } catch {
+          // 取不到等级时按普通失败处理
+        }
+        if (isAltAccount) {
+          tokenStatus.value[tokenId] = "completed";
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `=== ${token.name} 领取功法残卷失败: ${error.message || "未知错误"}`,
+            type: "error",
+          });
+        }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
         releaseConnectionSlot();
