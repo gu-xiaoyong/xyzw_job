@@ -35,6 +35,13 @@ export function createTasksApex(deps) {
     isRunning.value = true;
     shouldStop.value = false;
 
+    // 运行标识：用于确认前端加载的是修复后的代码
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: "=== 逐鹿盐山竞猜 v2：已竞猜队伍自动跳过，重复投注只提示不报错 ===",
+      type: "info",
+    });
+
     selectedTokens.value.forEach((id) => {
       tokenStatus.value[id] = "waiting";
     });
@@ -79,8 +86,10 @@ export function createTasksApex(deps) {
           });
         }
 
-        // 3. 收集已竞猜的队伍 ID
-        const guessedTeamIds = new Set(guessMap[scheduleId] || []);
+        // 3. 收集已竞猜的队伍 ID（统一转字符串，避免数字/字符串类型不一致导致匹配失效）
+        const guessedTeamIds = new Set(
+          (guessMap[scheduleId] || []).map((id) => String(id)),
+        );
 
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -163,18 +172,25 @@ export function createTasksApex(deps) {
           const vote0 = getVoteCount(team0);
           const vote1 = getVoteCount(team1);
 
-          // 两队都已竞猜则跳过
-          if (guessedTeamIds.has(team0.teamId) && guessedTeamIds.has(team1.teamId)) {
+          // 任一边已竞猜过则整场跳过：该场已参与过，不能再去押另一边
+          const alreadyGuessedTeam =
+            guessedTeamIds.has(String(team0.teamId)) === true
+              ? team0
+              : guessedTeamIds.has(String(team1.teamId)) === true
+                ? team1
+                : null;
+          if (alreadyGuessedTeam) {
             skipCount++;
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} ${alreadyGuessedTeam.name} 已竞猜过，该场跳过（${team0.name} vs ${team1.name}）`,
+              type: "info",
+            });
             continue;
           }
 
           let pick;
-          if (guessedTeamIds.has(team0.teamId)) {
-            pick = team1;
-          } else if (guessedTeamIds.has(team1.teamId)) {
-            pick = team0;
-          } else if (vote0 !== undefined && vote1 !== undefined) {
+          if (vote0 !== undefined && vote1 !== undefined) {
             // 跟随票数多的一边(票数相同取主队)
             pick = vote0 >= vote1 ? team0 : team1;
           } else {
@@ -207,7 +223,7 @@ export function createTasksApex(deps) {
               { teamId: pick.teamId },
               8000,
             );
-            guessedTeamIds.add(pick.teamId);
+            guessedTeamIds.add(String(pick.teamId));
             successCount++;
             addLog({
               time: new Date().toLocaleTimeString(),
@@ -215,12 +231,27 @@ export function createTasksApex(deps) {
               type: "success",
             });
           } catch (err) {
-            failCount++;
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `${token.name} 竞猜 ${pick.name} 失败: ${err.message}`,
-              type: "error",
-            });
+            const msg = err.message || "未知错误";
+            if (msg.includes("12800040")) {
+              // 服务器规则：同一队伍每个账号只能竞猜一次，重复投注按跳过处理（失败数=开局已竞猜数已验证）
+              skipCount++;
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} ${pick.name} 已竞猜过该队伍，跳过`,
+                type: "info",
+              });
+            } else {
+              failCount++;
+              let codeHint = "";
+              if (/服务器错误: 200000\b/.test(msg)) {
+                codeHint = "（该场当前不可竞猜，可能未开始或已结束）";
+              }
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 竞猜 ${pick.name} 失败: ${msg}${codeHint}`,
+                type: "error",
+              });
+            }
           }
 
           // 竞猜间隔
@@ -235,12 +266,22 @@ export function createTasksApex(deps) {
         });
       } catch (error) {
         console.error(error);
-        tokenStatus.value[tokenId] = "failed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 逐鹿盐山竞猜失败: ${error.message}`,
-          type: "error",
-        });
+        if (/服务器错误: 200160\b/.test(error.message || "")) {
+          // 活动模块未开启（如等级不足的小号），按跳过处理，不报错误
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 逐鹿盐山活动未开启，跳过`,
+            type: "info",
+          });
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 逐鹿盐山竞猜失败: ${error.message}`,
+            type: "error",
+          });
+        }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
         releaseConnectionSlot();
