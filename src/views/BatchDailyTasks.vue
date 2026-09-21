@@ -434,7 +434,7 @@
                 <n-button
                   size="small"
                   :disabled="isRunning || selectedTokens.length === 0"
-                  @click="batchApexGuess(apexScheduleId)"
+                  @click="batchApexGuess()"
                 >
                   逐鹿盐山竞猜
                 </n-button>
@@ -5723,8 +5723,6 @@ const { batchCampChallenge, batchCampChallengePet, batchCampClaimTasks } = tasks
 const tasksXuanwuBlessing = createTasksXuanwuBlessing(createTaskDeps());
 const { batchXuanwuBlessing } = tasksXuanwuBlessing;
 
-// 逐鹿盐山竞猜配置
-const apexScheduleId = ref(46);
 
 // 营地挑战模式选择
 const campChallengeMode = ref("pet");
