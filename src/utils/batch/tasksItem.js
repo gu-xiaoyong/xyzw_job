@@ -497,10 +497,14 @@ export function createTasksItem(deps) {
                     });
                     await new Promise((r) => setTimeout(r, 1000));
                   } catch (e) {
+                    // 200020 = 服务器暂无可领取，属正常情况
+                    const nothingToClaim = (e.message || "").includes("200020");
                     addLog({
                       time: new Date().toLocaleTimeString(),
-                      message: `${token.name} 领取俱乐部任务奖励失败: ${e.message}`,
-                      type: "error",
+                      message: nothingToClaim
+                        ? `${token.name} 俱乐部任务奖励暂无可领取，跳过`
+                        : `${token.name} 领取俱乐部任务奖励失败: ${e.message}`,
+                      type: nothingToClaim ? "info" : "error",
                     });
                   }
                 }
@@ -521,20 +525,27 @@ export function createTasksItem(deps) {
                     });
                     await new Promise((r) => setTimeout(r, 1000));
                   } catch (e) {
+                    // 200020 = 服务器暂无可领取，属正常情况
+                    const nothingToClaim = (e.message || "").includes("200020");
                     addLog({
                       time: new Date().toLocaleTimeString(),
-                      message: `${token.name} 领取个人任务奖励失败: ${e.message}`,
-                      type: "error",
+                      message: nothingToClaim
+                        ? `${token.name} 个人任务奖励暂无可领取，跳过`
+                        : `${token.name} 领取个人任务奖励失败: ${e.message}`,
+                      type: nothingToClaim ? "info" : "error",
                     });
                   }
                 }
             }
           } catch (err) {
              console.error("领取蟠桃园积分奖励异常:", err);
+             const nothingToClaim = (err.message || "").includes("200020");
              addLog({
                time: new Date().toLocaleTimeString(),
-               message: `${token.name} 领取积分奖励异常: ${err.message}`,
-               type: "error",
+               message: nothingToClaim
+                 ? `${token.name} 积分奖励暂无可领取，跳过`
+                 : `${token.name} 领取积分奖励异常: ${err.message}`,
+               type: nothingToClaim ? "info" : "error",
              });
           }
 
@@ -562,12 +573,23 @@ export function createTasksItem(deps) {
         });
       } catch (error) {
         console.error(error);
-        tokenStatus.value[tokenId] = "failed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 领取蟠桃园任务奖励失败: ${error.message}`,
-          type: "error",
-        });
+        // 200020 = 服务器暂无可领取，属正常情况
+        const nothingToClaim = (error.message || "").includes("200020");
+        if (nothingToClaim) {
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 蟠桃园暂无可领取奖励，跳过`,
+            type: "info",
+          });
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 领取蟠桃园任务奖励失败: ${error.message}`,
+            type: "error",
+          });
+        }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
         releaseConnectionSlot();
