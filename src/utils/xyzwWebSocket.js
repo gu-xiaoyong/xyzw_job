@@ -1059,9 +1059,9 @@ export class XyzwWebSocketClient {
         const errorDesc =
           errorCodeMap[packet.code] || packet.hint || "未知错误";
 
-        promiseData.reject(
-          new Error(`服务器错误: ${packet.code} - ${errorDesc}`),
-        );
+        const err = new Error(`服务器错误: ${packet.code} - ${errorDesc}`);
+        err.code = packet.code;
+        promiseData.reject(err);
       }
       return;
     }
@@ -1257,9 +1257,9 @@ export class XyzwWebSocketClient {
           const errorDesc =
             errorCodeMap[packet.code] || packet.hint || "未知错误";
 
-          promiseData.reject(
-            new Error(`服务器错误: ${packet.code} - ${errorDesc}`),
-          );
+          const err = new Error(`服务器错误: ${packet.code} - ${errorDesc}`);
+          err.code = packet.code;
+          promiseData.reject(err);
         }
         break;
       }
