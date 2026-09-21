@@ -420,7 +420,10 @@ export function registerDefaultCommands(reg) {
     .register("apex_getroleinfo")
     .register("apex_getguesslist", { scheduleId: 0, idx: 0 })
     .register("apex_guess", { teamId: "" })
-    .register("apex_get64oppomap", { scheduleId: 0, groupId: 0 });
+    .register("apex_get64oppomap", { scheduleId: 0, groupId: 0 })
+    // 逐鹿盐山助威
+    .register("apex_getvotelist", { groupId: 1, round: 0, idx: 0 })
+    .register("apex_vote", { teamId: "", round: 0, voteCnt: 0 });
   registry.commands.set(
     "fight_startareaarena",
     (ack = 0, seq = 0, params = {}) => {
@@ -1090,6 +1093,8 @@ export class XyzwWebSocketClient {
       apex_getguesslistresp: "apex_getguesslist",
       apex_guessresp: "apex_guess",
       apex_get64oppomapresp: "apex_get64oppomap",
+      apex_getvotelistresp: "apex_getvotelist",
+      apex_voteresp: "apex_vote",
       hero_recruitresp: "hero_recruit",
       friend_batchresp: "friend_batch",
       system_claimhanguprewardresp: "system_claimhangupreward",
