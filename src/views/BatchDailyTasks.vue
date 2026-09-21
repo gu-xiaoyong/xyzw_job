@@ -445,6 +445,13 @@
                 >
                   逐鹿盐山助威
                 </n-button>
+                <n-button
+                  size="small"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                  @click="batchApexClaimTask"
+                >
+                  逐鹿盐山任务
+                </n-button>
               </n-space>
             </n-tab-pane>
             <n-tab-pane name="baoku" tab="宝库">
@@ -5752,7 +5759,7 @@ const tasksFootball = createTasksFootball(createTaskDeps());
 const { batchFootballBet } = tasksFootball;
 
 const tasksApex = createTasksApex(createTaskDeps());
-const { batchApexGuess, batchApexVote } = tasksApex;
+const { batchApexGuess, batchApexVote, batchApexClaimTask } = tasksApex;
 
 const tasksCampChallenge = createTasksCampChallenge(createTaskDeps());
 const { batchCampChallenge, batchCampChallengePet, batchCampClaimTasks } = tasksCampChallenge;

@@ -1,6 +1,6 @@
 /**
  * 逐鹿盐山竞猜任务
- * 包含: 一键批量竞猜（自动选助威最高队伍）、一键批量助威（跟助威榜第一名）
+ * 包含: 一键批量竞猜（自动选助威最高队伍）、一键批量助威（跟助威榜第一名）、一键批量领取活跃度任务
  */
 
 import {
@@ -508,8 +508,240 @@ export function createTasksApex(deps) {
     message.success("批量逐鹿盐山助威结束");
   };
 
+  // 逐鹿盐山活跃度任务协议候选：命令名未公开（上游也未实现），按本项目命名惯例探测，
+  // 首个可用的命令胜出并复用；全部不中则提示需要抓包，不刷错误
+  const APEX_TASK_GET_CANDIDATES = [
+    "apex_gettasklist",
+    "apex_gettask",
+    "apex_gettaskinfo",
+  ];
+  const APEX_TASK_CLAIM_CANDIDATES = [
+    "apex_claimtask",
+    "apex_claimtaskreward",
+    "apex_claimtaskprize",
+  ];
+
+  /** 从响应中尽力提取任务列表（兼容数组/Map 两种结构） */
+  const extractApexTasks = (resp) => {
+    if (!resp) return null;
+    for (const key of ["apexTaskList", "taskList", "tasks", "apexTaskInfo"]) {
+      const v = resp[key];
+      if (Array.isArray(v) && v.length > 0) return v;
+    }
+    for (const key of ["apexTaskMap", "taskMap"]) {
+      const v = resp[key];
+      if (v && typeof v === "object" && Object.keys(v).length > 0) {
+        return Object.values(v);
+      }
+    }
+    return null;
+  };
+
+  /**
+   * 一键批量领取逐鹿盐山活跃度任务
+   */
+  const batchApexClaimTask = async () => {
+    if (selectedTokens.value.length === 0) return;
+
+    isRunning.value = true;
+    shouldStop.value = false;
+
+    selectedTokens.value.forEach((id) => {
+      tokenStatus.value[id] = "waiting";
+    });
+
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: "=== 逐鹿盐山任务领取 v1：自动探测任务协议并逐个领取 ===",
+      type: "info",
+    });
+
+    const taskPromises = selectedTokens.value.map(async (tokenId) => {
+      if (shouldStop.value) return;
+
+      tokenStatus.value[tokenId] = "running";
+      const token = tokens.value.find((t) => t.id === tokenId);
+
+      try {
+        await ensureConnection(tokenId);
+
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `=== 开始领取逐鹿盐山任务: ${token.name} ===`,
+          type: "info",
+        });
+
+        // 1. 探测任务列表接口
+        let getCmd = null;
+        let tasks = null;
+        for (const cmd of APEX_TASK_GET_CANDIDATES) {
+          if (shouldStop.value) break;
+          try {
+            const resp = await tokenStore.sendMessageWithPromise(
+              tokenId,
+              cmd,
+              {},
+              4000,
+            );
+            const list = extractApexTasks(resp);
+            if (list) {
+              getCmd = cmd;
+              tasks = list;
+              break;
+            }
+          } catch {
+            // 换下一个候选
+          }
+        }
+
+        // 带场次参数兜底探测一次（复用竞猜活跃场次）
+        if (!getCmd && !shouldStop.value) {
+          try {
+            const roleResp = await tokenStore.sendMessageWithPromise(
+              tokenId,
+              "apex_getroleinfo",
+              {},
+              8000,
+            );
+            const apexRoleInfo = roleResp?.apexRoleInfo || {};
+            const activeGuess = Object.keys(
+              apexRoleInfo.guessClaimMap || {},
+            ).find(
+              (key) =>
+                Object.keys(apexRoleInfo.guessClaimMap[key] || {}).length === 0,
+            );
+            if (activeGuess) {
+              const resp = await tokenStore.sendMessageWithPromise(
+                tokenId,
+                "apex_gettasklist",
+                { scheduleId: Number(activeGuess) },
+                4000,
+              );
+              const list = extractApexTasks(resp);
+              if (list) {
+                getCmd = "apex_gettasklist";
+                tasks = list;
+              }
+            }
+          } catch {
+            // 探测失败走统一提示
+          }
+        }
+
+        if (!getCmd || !tasks) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 未匹配到逐鹿盐山任务接口（协议需抓包确认），跳过领取`,
+            type: "info",
+          });
+          tokenStatus.value[tokenId] = "completed";
+          return;
+        }
+
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${token.name} 任务接口 ${getCmd}，获取到 ${tasks.length} 个任务`,
+          type: "info",
+        });
+
+        // 2. 逐个领取（领取接口首个任务探测确定后复用；连续两个任务都没匹配到则放弃）
+        let claimCmd = null;
+        let claimedCount = 0;
+        for (let i = 0; i < tasks.length; i++) {
+          if (shouldStop.value) break;
+          const task = tasks[i];
+          const taskId = task?.id ?? task?.taskId;
+          if (taskId === undefined || taskId === null) continue;
+
+          const candidates = claimCmd ? [claimCmd] : APEX_TASK_CLAIM_CANDIDATES;
+          let claimed = false;
+          for (const cmd of candidates) {
+            try {
+              await tokenStore.sendMessageWithPromise(
+                tokenId,
+                cmd,
+                { taskId },
+                5000,
+              );
+              claimCmd = cmd;
+              claimed = true;
+              break;
+            } catch {
+              // 换下一个候选
+            }
+          }
+          if (claimed) {
+            claimedCount++;
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 领取任务${taskId}奖励成功`,
+              type: "success",
+            });
+          } else if (!claimCmd && i >= 1) {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 领取接口未匹配（协议需抓包确认），停止领取`,
+              type: "info",
+            });
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 500));
+        }
+
+        if (claimedCount === 0) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 没有可领取的任务奖励`,
+            type: "info",
+          });
+        } else {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 共领取 ${claimedCount} 个任务奖励`,
+            type: "success",
+          });
+        }
+
+        tokenStatus.value[tokenId] = "completed";
+      } catch (error) {
+        console.error(error);
+        if (/服务器错误: 200160\b/.test(error.message || "")) {
+          // 活动模块未开启（如等级不足的小号），按跳过处理，不报错误
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 逐鹿盐山活动未开启，跳过`,
+            type: "info",
+          });
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 领取逐鹿盐山任务失败: ${error.message}`,
+            type: "error",
+          });
+        }
+      } finally {
+        tokenStore.closeWebSocketConnection(tokenId);
+        releaseConnectionSlot();
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+          type: "info",
+        });
+      }
+    });
+
+    await Promise.all(taskPromises);
+
+    isRunning.value = false;
+    currentRunningTokenId.value = null;
+    message.success("批量领取逐鹿盐山任务结束");
+  };
+
   return {
     batchApexGuess,
     batchApexVote,
+    batchApexClaimTask,
   };
 }
