@@ -18,21 +18,22 @@
  * 因此 task 会收到第二个参数 queuedMs：调用方应把它叠加到自己的超时上。
  */
 
-/** 限流动作类型：查询类（只读拉取）/ 竞猜（apex_guess）/ 助威（apex_vote） */
+/** 限流动作类型：查询类（只读拉取）/ 竞猜（apex_guess）/ 助威（apex_vote）/ 任务领取（apex_taskclaim） */
 export const ApexAction = {
   READ: "read",
   GUESS: "guess",
   VOTE: "vote",
+  CLAIM: "claim",
 };
 
 /** 各动作间隔估计值下限（ms）：低于此值基本必被服务器打回 */
-const EST_FLOOR = { read: 300, guess: 1200, vote: 1200 };
+const EST_FLOOR = { read: 300, guess: 1200, vote: 1200, claim: 1200 };
 
 /** 间隔估计值上限（ms）：超过 15s 多为异常/全局限流，不再无脑拉长 */
 const EST_CEIL = 15000;
 
 /** 间隔估计初始值（ms）：对齐服务器实测冷却窗口（约 3~5s），收敛后会自动下调 */
-const EST_DEFAULT = { read: 600, guess: 3000, vote: 3000 };
+const EST_DEFAULT = { read: 600, guess: 3000, vote: 3000, claim: 3000 };
 
 /** 排期余量（ms）：避免贴边触发 200400 */
 const EST_MARGIN = 200;
@@ -100,9 +101,9 @@ const persistEst = () => {
 
 const est = loadEst();
 /** 各动作下一次允许发送的时刻（时间戳，ms） */
-const nextAllowedAt = { read: 0, guess: 0, vote: 0 };
+const nextAllowedAt = { read: 0, guess: 0, vote: 0, claim: 0 };
 /** 各动作连续成功次数 */
-const okStreak = { read: 0, guess: 0, vote: 0 };
+const okStreak = { read: 0, guess: 0, vote: 0, claim: 0 };
 /** 最近一条 apex 命令的发出时刻（全局最小间隔基准） */
 let lastSentAt = 0;
 

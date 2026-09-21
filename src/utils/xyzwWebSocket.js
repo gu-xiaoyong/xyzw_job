@@ -417,7 +417,9 @@ export function registerDefaultCommands(reg) {
     .register("apex_get64oppomap", { scheduleId: 0, groupId: 0 })
     // 逐鹿盐山助威
     .register("apex_getvotelist", { groupId: 1, round: 0, idx: 0 })
-    .register("apex_vote", { teamId: "", round: 0, voteCnt: 0 });
+    .register("apex_vote", { teamId: "", round: 0, voteCnt: 0 })
+    // 逐鹿盐山活跃度任务领取（confId 取值 1~7，抓包确认）
+    .register("apex_taskclaim", { confId: 0 });
   registry.commands.set(
     "fight_startareaarena",
     (ack = 0, seq = 0, params = {}) => {

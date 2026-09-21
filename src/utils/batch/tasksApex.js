@@ -621,34 +621,12 @@ export function createTasksApex(deps) {
     message.success("批量逐鹿盐山助威结束");
   };
 
-  // 逐鹿盐山活跃度任务协议候选：命令名未公开（上游也未实现），按本项目命名惯例探测，
-  // 首个可用的命令胜出并复用；全部不中则提示需要抓包，不刷错误
-  const APEX_TASK_GET_CANDIDATES = [
-    "apex_gettasklist",
-    "apex_gettask",
-    "apex_gettaskinfo",
-  ];
-  const APEX_TASK_CLAIM_CANDIDATES = [
-    "apex_claimtask",
-    "apex_claimtaskreward",
-    "apex_claimtaskprize",
-  ];
-
-  /** 从响应中尽力提取任务列表（兼容数组/Map 两种结构） */
-  const extractApexTasks = (resp) => {
-    if (!resp) return null;
-    for (const key of ["apexTaskList", "taskList", "tasks", "apexTaskInfo"]) {
-      const v = resp[key];
-      if (Array.isArray(v) && v.length > 0) return v;
-    }
-    for (const key of ["apexTaskMap", "taskMap"]) {
-      const v = resp[key];
-      if (v && typeof v === "object" && Object.keys(v).length > 0) {
-        return Object.values(v);
-      }
-    }
-    return null;
-  };
+  // 逐鹿盐山活跃度任务协议（2026-09-21 抓包确认）：
+  //   · 领取：apex_taskclaim，参数 { confId }，confId 取值 1~7（共 7 个任务）
+  //   · 已领取状态：apex_getroleinfo 响应的 apexRoleInfo.taskClaimedMap（键为 confId）
+  //   · 服务端无任务列表接口（重进任务页仅发 apex_getroleinfo），
+  //     未达成的 confId 由服务器报状态类错误，按跳过处理
+  const APEX_TASK_CONF_MAX = 7;
 
   /**
    * 一键批量领取逐鹿盐山活跃度任务
@@ -665,7 +643,7 @@ export function createTasksApex(deps) {
 
     addLog({
       time: new Date().toLocaleTimeString(),
-      message: "=== 逐鹿盐山任务领取 v1：自动探测任务协议并逐个领取 ===",
+      message: "=== 逐鹿盐山任务领取 v2：已领取跳过，未达成由服务器裁决 ===",
       type: "info",
     });
 
@@ -684,138 +662,96 @@ export function createTasksApex(deps) {
           type: "info",
         });
 
-        // 1. 探测任务列表接口
-        let getCmd = null;
-        let tasks = null;
-        for (const cmd of APEX_TASK_GET_CANDIDATES) {
-          if (shouldStop.value) break;
-          try {
-            const resp = await tokenStore.sendMessageWithPromise(
-              tokenId,
-              cmd,
-              {},
-              4000,
-            );
-            const list = extractApexTasks(resp);
-            if (list) {
-              getCmd = cmd;
-              tasks = list;
-              break;
-            }
-          } catch {
-            // 换下一个候选
-          }
-        }
-
-        // 带场次参数兜底探测一次（复用竞猜活跃场次）
-        if (!getCmd && !shouldStop.value) {
-          try {
-            const roleResp = await tokenStore.sendMessageWithPromise(
+        // 1. 取角色信息：taskClaimedMap 记录已领取的 confId
+        const roleResp = await sendApex(
+          ApexAction.READ,
+          (queuedMs) =>
+            tokenStore.sendMessageWithPromise(
               tokenId,
               "apex_getroleinfo",
               {},
-              8000,
-            );
-            const apexRoleInfo = roleResp?.apexRoleInfo || {};
-            const activeGuess = Object.keys(
-              apexRoleInfo.guessClaimMap || {},
-            ).find(
-              (key) =>
-                Object.keys(apexRoleInfo.guessClaimMap[key] || {}).length === 0,
-            );
-            if (activeGuess) {
-              const resp = await tokenStore.sendMessageWithPromise(
-                tokenId,
-                "apex_gettasklist",
-                { scheduleId: Number(activeGuess) },
-                4000,
-              );
-              const list = extractApexTasks(resp);
-              if (list) {
-                getCmd = "apex_gettasklist";
-                tasks = list;
-              }
-            }
-          } catch {
-            // 探测失败走统一提示
-          }
-        }
+              TIMEOUT_MS + queuedMs,
+            ),
+          READ_MAX_RETRY,
+        );
+        const apexRoleInfo = roleResp?.apexRoleInfo || {};
+        const claimedMap = apexRoleInfo.taskClaimedMap || {};
+        const claimedIds = new Set(
+          Object.keys(claimedMap)
+            .filter((key) => claimedMap[key] === true)
+            .map(Number),
+        );
 
-        if (!getCmd || !tasks) {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${token.name} 未匹配到逐鹿盐山任务接口，需抓包确认：游戏内打开逐鹿盐山任务页并领取一次奖励，把抓到的命令名发我`,
-            type: "warning",
-          });
-          tokenStatus.value[tokenId] = "completed";
-          return;
-        }
-
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 任务接口 ${getCmd}，获取到 ${tasks.length} 个任务`,
-          type: "info",
-        });
-
-        // 2. 逐个领取（领取接口首个任务探测确定后复用；连续两个任务都没匹配到则放弃）
-        let claimCmd = null;
+        // 2. 逐个领取 confId 1~7：已领跳过，未达成/不存在的由服务器报状态类错误跳过
         let claimedCount = 0;
-        for (let i = 0; i < tasks.length; i++) {
-          if (shouldStop.value) break;
-          const task = tasks[i];
-          const taskId = task?.id ?? task?.taskId;
-          if (taskId === undefined || taskId === null) continue;
+        let skippedCount = 0;
+        let failCount = 0;
+        let abortedByRateLimit = false;
 
-          const candidates = claimCmd ? [claimCmd] : APEX_TASK_CLAIM_CANDIDATES;
-          let claimed = false;
-          for (const cmd of candidates) {
-            try {
-              await tokenStore.sendMessageWithPromise(
-                tokenId,
-                cmd,
-                { taskId },
-                5000,
-              );
-              claimCmd = cmd;
-              claimed = true;
-              break;
-            } catch {
-              // 换下一个候选
-            }
+        for (let confId = 1; confId <= APEX_TASK_CONF_MAX; confId++) {
+          if (shouldStop.value) break;
+          if (abortedByRateLimit) break;
+          if (claimedIds.has(confId)) {
+            skippedCount++;
+            continue;
           }
-          if (claimed) {
+
+          try {
+            await runApexAction(
+              ApexAction.CLAIM,
+              (queuedMs) =>
+                tokenStore.sendMessageWithPromise(
+                  tokenId,
+                  "apex_taskclaim",
+                  { confId },
+                  TIMEOUT_MS + queuedMs,
+                ),
+              { maxRetry: READ_MAX_RETRY },
+            );
             claimedCount++;
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `${token.name} 领取任务${taskId}奖励成功`,
+              message: `${token.name} 领取任务(confId=${confId})奖励成功 ✓`,
               type: "success",
             });
-          } else if (!claimCmd && i >= 1) {
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `${token.name} 任务列表已获取，但领取接口未匹配，需抓包确认：游戏内领取一次任务奖励，把抓到的命令名发我`,
-              type: "warning",
-            });
-            break;
+          } catch (err) {
+            const msg = err.message || "未知错误";
+            if (isApexRateLimited(err)) {
+              // 重试仍被限流：停止该账号后续领取，等待自适应间隔恢复
+              abortedByRateLimit = true;
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 连续被服务器限流（200400），约 ${Math.ceil(apexCooldownLeft(ApexAction.CLAIM) / 1000)}s 后可继续，本次中止剩余领取`,
+                type: "warning",
+              });
+            } else if (/服务器错误: 200\d{3}\b/.test(msg)) {
+              // 状态类错误（未达成/已领取/不存在等）：正常情况，静默计数不刷日志
+              skippedCount++;
+            } else {
+              failCount++;
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 领取任务(confId=${confId})失败: ${msg}`,
+                type: "warning",
+              });
+            }
           }
-          await new Promise((r) => setTimeout(r, 500));
         }
 
-        if (claimedCount === 0) {
+        if (abortedByRateLimit) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `${token.name} 没有可领取的任务奖励`,
-            type: "info",
-          });
-        } else {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${token.name} 共领取 ${claimedCount} 个任务奖励`,
-            type: "success",
+            message: `${token.name} 因服务器限流提前结束，未领取部分稍后重跑即可`,
+            type: "warning",
           });
         }
 
         tokenStatus.value[tokenId] = "completed";
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `=== ${token.name} 任务领取完成: 成功${claimedCount} 跳过${skippedCount} 失败${failCount}（已领${claimedIds.size}/共${APEX_TASK_CONF_MAX}个任务） ===`,
+          type: claimedCount > 0 ? "success" : "info",
+        });
       } catch (error) {
         console.error(error);
         if (/服务器错误: 200160\b/.test(error.message || "")) {
