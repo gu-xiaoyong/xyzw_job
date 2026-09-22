@@ -643,7 +643,7 @@ export function createTasksApex(deps) {
 
     addLog({
       time: new Date().toLocaleTimeString(),
-      message: "=== 逐鹿盐山任务领取 v2：已领取跳过，未达成由服务器裁决 ===",
+      message: "=== 逐鹿盐山任务领取 v3：间隔对齐客户端实测(1.3s)，已领取跳过 ===",
       type: "info",
     });
 

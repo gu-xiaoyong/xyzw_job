@@ -27,13 +27,14 @@ export const ApexAction = {
 };
 
 /** 各动作间隔估计值下限（ms）：低于此值基本必被服务器打回 */
-const EST_FLOOR = { read: 300, guess: 1200, vote: 1200, claim: 1200 };
+const EST_FLOOR = { read: 300, guess: 1200, vote: 1200, claim: 1000 };
 
 /** 间隔估计值上限（ms）：超过 15s 多为异常/全局限流，不再无脑拉长 */
 const EST_CEIL = 15000;
 
-/** 间隔估计初始值（ms）：对齐服务器实测冷却窗口（约 3~5s），收敛后会自动下调 */
-const EST_DEFAULT = { read: 600, guess: 3000, vote: 3000, claim: 3000 };
+/** 间隔估计初始值（ms）：竞猜/助威对齐服务器实测冷却（约 3~5s）；
+ * 任务领取对齐游戏客户端实测连领间隔（抓包 1.3s/个未限流），整体提速 */
+const EST_DEFAULT = { read: 600, guess: 3000, vote: 3000, claim: 1500 };
 
 /** 排期余量（ms）：避免贴边触发 200400 */
 const EST_MARGIN = 200;
@@ -53,8 +54,8 @@ const MIN_CMD_GAP_MS = 200;
 /** 单条命令遇到 200400 后的最大自动重试次数 */
 const MAX_RETRY = 3;
 
-/** 估计值持久化键（跨会话沿用学习结果） */
-const STORE_KEY = "apex:estCooldown:v2";
+/** 估计值持久化键（跨会话沿用学习结果）；调低 claim 初始间隔后升版作废旧学习值 */
+const STORE_KEY = "apex:estCooldown:v3";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -134,7 +135,7 @@ export const apexEstMs = (key) => est[key] ?? 0;
 
 /** 自适应限流概览文案（证明间隔是学习出来的，而非写死的常量） */
 export const apexEstText = () =>
-  `自适应限流：查询 ${(est.read / 1000).toFixed(1)}s · 竞猜 ${(est.guess / 1000).toFixed(1)}s · 助威 ${(est.vote / 1000).toFixed(1)}s`;
+  `自适应限流：查询 ${(est.read / 1000).toFixed(1)}s · 竞猜 ${(est.guess / 1000).toFixed(1)}s · 助威 ${(est.vote / 1000).toFixed(1)}s · 领取 ${(est.claim / 1000).toFixed(1)}s`;
 
 /**
  * 按当前估计值排定下一次可发送时刻。
