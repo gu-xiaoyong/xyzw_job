@@ -19,6 +19,7 @@ import {
   getCurrentSeason,
   getGuessTabs,
   getScheduleIdByStage,
+  getScheduleStatus,
   getSupportGroupId,
   checkSupportInTime,
 } from "@/utils/apexRules";
@@ -706,7 +707,7 @@ export function createTasksApex(deps) {
                   { confId },
                   TIMEOUT_MS + queuedMs,
                 ),
-              { maxRetry: READ_MAX_RETRY },
+              { maxRetry: READ_MAX_RETRY, scope: String(tokenId) },
             );
             claimedCount++;
             addLog({
@@ -721,7 +722,7 @@ export function createTasksApex(deps) {
               abortedByRateLimit = true;
               addLog({
                 time: new Date().toLocaleTimeString(),
-                message: `${token.name} 连续被服务器限流（200400），约 ${Math.ceil(apexCooldownLeft(ApexAction.CLAIM) / 1000)}s 后可继续，本次中止剩余领取`,
+                  message: `${token.name} 连续被服务器限流（200400），约 ${Math.ceil(apexCooldownLeft(ApexAction.CLAIM, String(tokenId)) / 1000)}s 后可继续，本次中止剩余领取`,
                 type: "warning",
               });
             } else if (/服务器错误: 200\d{3}\b/.test(msg)) {
@@ -808,7 +809,7 @@ export function createTasksApex(deps) {
 
     addLog({
       time: new Date().toLocaleTimeString(),
-      message: "=== 逐鹿盐山竞猜奖励领取 v1：按竞猜记录逐个领取，已领跳过 ===",
+      message: "=== 逐鹿盐山竞猜奖励领取 v2：只领已结算期次，多账号并行 ===",
       type: "info",
     });
 
@@ -842,30 +843,46 @@ export function createTasksApex(deps) {
         const apexRoleInfo = roleResp?.apexRoleInfo || {};
         const guessMap = apexRoleInfo.guessMap || {};
         const guessClaimMap = apexRoleInfo.guessClaimMap || {};
-        const entries = Object.entries(guessMap).filter(
+
+        // 只领「已结算」的期次：进行中/未解锁的领不了，历史期次防洪水盲试
+        const nowMs = calibrateServerTime(
+          Date.now(),
+          apexRoleInfo.resetTime?.day,
+        );
+        const allEntries = Object.entries(guessMap).filter(
           ([, teamIds]) => Array.isArray(teamIds) && teamIds.length > 0,
         );
+        const entries = allEntries
+          .filter(
+            ([scheduleId]) =>
+              getScheduleStatus(Number(scheduleId), nowMs) ===
+              ApexScheduleStatus.Completed,
+          )
+          .sort((a, b) => Number(b[0]) - Number(a[0]));
 
         if (entries.length === 0) {
           tokenStatus.value[tokenId] = "completed";
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `${token.name} 没有逐鹿盐山竞猜记录`,
+            message: `${token.name} 没有可领取的竞猜奖励（共${allEntries.length}期竞猜记录，均未结算）`,
             type: "info",
           });
           return;
         }
 
-        // 2. 逐个领取：已记录领取的跳过，预测失败/未结束由服务器状态类错误跳过
+        // 2. 逐个领取（新→旧）：已记录领取的跳过，预测失败/已领取由服务器状态类错误跳过
         let claimedCount = 0;
         let skippedCount = 0;
         let failCount = 0;
         let abortedByRateLimit = false;
+        let emptySchedules = 0;
+        let stoppedByEmpty = false;
 
         for (const [scheduleId, teamIds] of entries) {
           if (shouldStop.value) break;
           if (abortedByRateLimit) break;
           const claimedTeams = guessClaimMap[scheduleId] || {};
+          let successInSchedule = 0;
 
           for (const teamId of teamIds) {
             if (shouldStop.value) break;
@@ -885,9 +902,10 @@ export function createTasksApex(deps) {
                     { scheduleId: Number(scheduleId), teamId },
                     TIMEOUT_MS + queuedMs,
                   ),
-                { maxRetry: READ_MAX_RETRY },
+                { maxRetry: READ_MAX_RETRY, scope: String(tokenId) },
               );
               claimedCount++;
+              successInSchedule++;
               addLog({
                 time: new Date().toLocaleTimeString(),
                 message: `${token.name} 领取竞猜奖励(${scheduleId}期 ${teamId})成功 ✓`,
@@ -900,7 +918,7 @@ export function createTasksApex(deps) {
                 abortedByRateLimit = true;
                 addLog({
                   time: new Date().toLocaleTimeString(),
-                  message: `${token.name} 连续被服务器限流（200400），约 ${Math.ceil(apexCooldownLeft(ApexAction.CLAIM) / 1000)}s 后可继续，本次中止剩余领取`,
+                  message: `${token.name} 连续被服务器限流（200400），约 ${Math.ceil(apexCooldownLeft(ApexAction.CLAIM, String(tokenId)) / 1000)}s 后可继续，本次中止剩余领取`,
                   type: "warning",
                 });
               } else if (/服务器错误: 200\d{3}\b/.test(msg)) {
@@ -916,6 +934,19 @@ export function createTasksApex(deps) {
               }
             }
           }
+
+          if (abortedByRateLimit || shouldStop.value) break;
+
+          // 连续多期尝试全部无效：更早期次早已结算处理完，停止回溯省时
+          if (successInSchedule === 0) {
+            emptySchedules += 1;
+            if (emptySchedules >= 3) {
+              stoppedByEmpty = true;
+              break;
+            }
+          } else {
+            emptySchedules = 0;
+          }
         }
 
         if (abortedByRateLimit) {
@@ -923,6 +954,13 @@ export function createTasksApex(deps) {
             time: new Date().toLocaleTimeString(),
             message: `${token.name} 因服务器限流提前结束，未领取部分稍后重跑即可`,
             type: "warning",
+          });
+        }
+        if (stoppedByEmpty) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 连续3期均无可领奖励，停止回溯更早期次`,
+            type: "info",
           });
         }
 

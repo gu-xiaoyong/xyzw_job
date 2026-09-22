@@ -48,8 +48,8 @@ const EST_SHRINK = 200;
 /** 连续成功多少次才下调一次（避免在边界上反复抖动） */
 const OK_BEFORE_SHRINK = 3;
 
-/** 任意两条 apex 命令之间的最小间隔（ms），用于打散突发请求 */
-const MIN_CMD_GAP_MS = 200;
+/** 任意两条 apex 命令之间的最小间隔（ms，全局跨账号）：claim 交错 500ms 防并发突发 */
+const MIN_CMD_GAP = { read: 200, guess: 200, vote: 200, claim: 500 };
 
 /** 单条命令遇到 200400 后的最大自动重试次数 */
 const MAX_RETRY = 3;
@@ -101,10 +101,10 @@ const persistEst = () => {
 };
 
 const est = loadEst();
-/** 各动作下一次允许发送的时刻（时间戳，ms） */
-const nextAllowedAt = { read: 0, guess: 0, vote: 0, claim: 0 };
-/** 各动作连续成功次数 */
-const okStreak = { read: 0, guess: 0, vote: 0, claim: 0 };
+/** 各动作(按 scope 细分到账号)下一次允许发送的时刻（时间戳，ms） */
+const nextAllowedAt = {};
+/** 各动作(按 scope 细分到账号)连续成功次数 */
+const okStreak = {};
 /** 最近一条 apex 命令的发出时刻（全局最小间隔基准） */
 let lastSentAt = 0;
 
@@ -119,11 +119,17 @@ export const isApexRateLimited = (e) =>
 /**
  * 距离该动作下一次可发送还需等待的毫秒数。
  * @param {string} key 动作类型（ApexAction）
+ * @param {string} [scope] 账号维度（如 tokenId）；claim 类动作按账号独立排期
  * @returns {number} 等待毫秒数，0 表示可立即发送
  */
-export const apexCooldownLeft = (key) => {
+export const apexCooldownLeft = (key, scope = "") => {
+  const sk = scope ? `${key}:${scope}` : key;
   const now = Date.now();
-  return Math.max(0, nextAllowedAt[key] - now, lastSentAt + MIN_CMD_GAP_MS - now);
+  return Math.max(
+    0,
+    (nextAllowedAt[sk] ?? 0) - now,
+    lastSentAt + (MIN_CMD_GAP[key] ?? 200) - now,
+  );
 };
 
 /**
@@ -139,31 +145,34 @@ export const apexEstText = () =>
 
 /**
  * 按当前估计值排定下一次可发送时刻。
- * @param {string} key 动作类型（ApexAction）
+ * @param {string} sk 排期键（动作或 动作:账号）
+ * @param {string} key 动作类型（ApexAction），学习值按动作共享
  */
-const scheduleNext = (key) => {
-  nextAllowedAt[key] = Date.now() + est[key] + EST_MARGIN;
+const scheduleNext = (sk, key) => {
+  nextAllowedAt[sk] = Date.now() + est[key] + EST_MARGIN;
 };
 
 /**
  * 发送成功：连续成功达阈值则下调估计值，向服务器真实冷却收敛。
+ * @param {string} sk 排期键（动作或 动作:账号）
  * @param {string} key 动作类型（ApexAction）
  */
-const onSuccess = (key) => {
-  okStreak[key] += 1;
-  if (okStreak[key] >= OK_BEFORE_SHRINK) {
+const onSuccess = (sk, key) => {
+  okStreak[sk] = (okStreak[sk] ?? 0) + 1;
+  if (okStreak[sk] >= OK_BEFORE_SHRINK) {
     est[key] = clampEst(key, est[key] - EST_SHRINK);
-    okStreak[key] = 0;
+    okStreak[sk] = 0;
     persistEst();
   }
 };
 
 /**
  * 被限流（200400）：乘性放大估计值——针对真实限流的关键一步。
+ * @param {string} sk 排期键（动作或 动作:账号）
  * @param {string} key 动作类型（ApexAction）
  */
-const onRateLimited = (key) => {
-  okStreak[key] = 0;
+const onRateLimited = (sk, key) => {
+  okStreak[sk] = 0;
   est[key] = clampEst(key, est[key] * EST_GROW);
   persistEst();
 };
@@ -179,15 +188,22 @@ const serialize = (task) => {
   return run;
 };
 
+/** 允许按账号并行发送的动作（各自排期，不进全局串行链）；其余动作全局串行 */
+const PARALLEL_ACTIONS = new Set([ApexAction.CLAIM]);
+
 /**
  * 发送一条 apex 命令。
  *
  * 两种模式：
- *  · 默认（批量/轮询）：进入全局串行链，先等自适应冷却再发，被 200400 打回则放大间隔重试。
- *    用于分页拉取、30s 轮询、批量任务——这些是「我们自己发起」的，串行化能消除并发突发。
+ *  · 默认（批量/轮询）：先等自适应冷却再发，被 200400 打回则放大间隔重试。
+ *    用于分页拉取、30s 轮询、批量任务——这些是「我们自己发起」的。
  *  · immediate（用户手动点击）：**不等冷却、不进串行链**，立即发送，让服务器的冷却窗口
- *    自己裁决。只有真被 200400 打回时才退避重试。手动操作本来就受服务器 3~5s 冷却限制，
+ *    自己裁决。手动操作本来就受服务器 3~5s 冷却限制，
  *    客户端再叠加一层排队只会让点击「没反应」，而不会让服务器放得更快。
+ *
+ * 并发策略：claim 类动作带 scope（账号）时不进全局串行链，各账号按学习间隔
+ * 独立排期、多账号并行；跨账号仍受全局最小间隔约束。学习值 est 按动作全局
+ * 共享——服务器冷却的唯一真值，任一账号被 200400 都会全局退避，自收敛。
  *
  * @param {string} key 动作类型（ApexAction）
  * @param {Function} task 实际发送函数，返回 Promise；入参为 queuedMs（排队耗时）
@@ -195,22 +211,24 @@ const serialize = (task) => {
  * @param {number} [opt.maxRetry] 200400 最大自动重试次数
  * @param {Function} [opt.onWait] 等待冷却时的回调，参数为等待毫秒数（用于 UI 倒计时 / 日志）
  * @param {boolean} [opt.immediate] 用户手动触发：跳过排队与冷却等待，直接发送
+ * @param {string} [opt.scope] 账号维度（如 tokenId），claim 类动作并行排期的粒度
  * @returns {Promise<*>} task 的返回值
  * @throws {Error} 重试耗尽或遇到非限流错误时抛出原始异常
  */
 export const runApexAction = async (
   key,
   task,
-  { maxRetry, onWait, immediate = false } = {},
+  { maxRetry, onWait, immediate = false, scope = "" } = {},
 ) => {
   // 手动操作只自动重试 1 次：多试几次会让点击「卡住」很久，不如明确告知用户稍后再点
   const retries = maxRetry ?? (immediate ? 1 : MAX_RETRY);
+  const sk = scope ? `${key}:${scope}` : key;
   const run = async () => {
     for (let attempt = 0; ; attempt += 1) {
       // 记录本次排队实际耗时（冷却等待 + 进入串行链的等待）
       const queuedAt = Date.now();
       if (!immediate) {
-        const wait = apexCooldownLeft(key);
+        const wait = apexCooldownLeft(key, scope);
         if (wait > 0) {
           onWait?.(wait);
           await sleep(wait);
@@ -220,18 +238,18 @@ export const runApexAction = async (
       lastSentAt = Date.now();
       try {
         const res = await task(waitedMs);
-        onSuccess(key);
-        scheduleNext(key);
+        onSuccess(sk, key);
+        scheduleNext(sk, key);
         return res;
       } catch (e) {
         if (!isApexRateLimited(e)) {
-          okStreak[key] = 0;
-          scheduleNext(key);
+          okStreak[sk] = 0;
+          scheduleNext(sk, key);
           throw e;
         }
         // 服务器冷却自「上次放行」起算，本次被打回后从当前时刻重新排期
-        onRateLimited(key);
-        scheduleNext(key);
+        onRateLimited(sk, key);
+        scheduleNext(sk, key);
         if (attempt >= retries) {
           throw e;
         }
@@ -245,6 +263,7 @@ export const runApexAction = async (
     }
   };
 
-  // 手动操作不进串行链：用户点击应立即发出，不与后台轮询/分页争抢队列
+  // claim 类动作带账号 scope：不进全局串行链，多账号并行、各按各的间隔排期
+  if (!immediate && PARALLEL_ACTIONS.has(key) && scope) return run();
   return immediate ? run() : serialize(run);
 };
