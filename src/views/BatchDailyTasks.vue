@@ -346,6 +346,13 @@
                 </n-button>
                 <n-button
                   size="small"
+                  @click="batchClaimActivity"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                >
+                  一键活跃度奖励
+                </n-button>
+                <n-button
+                  size="small"
                   @click="batchGenieSweep"
                   :disabled="isRunning || selectedTokens.length === 0"
                 >
@@ -5713,6 +5720,7 @@ const {
   legionStoreBuySkinCoins,
   store_purchase,
   collection_claimfreereward,
+  batchClaimActivity,
 } = tasksStore;
 
 const tasksLegacy = createTasksLegacy(createTaskDeps());

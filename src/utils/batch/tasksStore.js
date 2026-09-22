@@ -1,6 +1,7 @@
 /**
  * 商店类任务
- * 包含: legion_storebuygoods, legionStoreBuySkinCoins, store_purchase, collection_claimfreereward
+ * 包含: legion_storebuygoods, legionStoreBuySkinCoins, store_purchase,
+ *       collection_claimfreereward, batchClaimActivity
  */
 
 /**
@@ -424,10 +425,140 @@ export function createTasksStore(deps) {
     shouldStop.value = false;
   };
 
+  /**
+   * 一键领取活跃度任务奖励
+   *
+   * 覆盖三部分：
+   *  · task_claimdailypoint { taskId 1~10 }：每日单个任务奖励
+   *  · task_claimdailyreward { rewardId:0 }：每日活跃度宝箱
+   *  · task_claimweekreward { rewardId:0 }：每周活跃度宝箱
+   * 宝箱接口的服务器行为未知（一次领全部或一次领一档），循环领到首个
+   * 状态类报错为止，两种行为都兼容；未达成/已领取按静默跳过处理。
+   */
+  const batchClaimActivity = async () => {
+    if (selectedTokens.value.length === 0) return;
+
+    isRunning.value = true;
+    shouldStop.value = false;
+
+    selectedTokens.value.forEach((id) => {
+      tokenStatus.value[id] = "waiting";
+    });
+
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: "=== 活跃度任务领取 v1：每日任务奖励 + 每日/每周活跃度宝箱 ===",
+      type: "info",
+    });
+
+    const taskPromises = selectedTokens.value.map(async (tokenId) => {
+      if (shouldStop.value) return;
+
+      tokenStatus.value[tokenId] = "running";
+      const token = tokens.value.find((t) => t.id === tokenId);
+
+      try {
+        await ensureConnection(tokenId);
+
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `=== 开始领取活跃度任务奖励: ${token.name} ===`,
+          type: "info",
+        });
+
+        let claimedCount = 0;
+        let skippedCount = 0;
+
+        /** 发一次领取：成功 true；状态类错误（未达成/已领/没有更多）false；其他错误抛出 */
+        const claimOnce = async (cmd, params, label) => {
+          try {
+            await tokenStore.sendMessageWithPromise(tokenId, cmd, params, 5000);
+            claimedCount += 1;
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} ${label}成功 ✓`,
+              type: "success",
+            });
+            await new Promise((r) => setTimeout(r, delayConfig.action));
+            return true;
+          } catch (err) {
+            if (/服务器错误: \d+\b/.test(err.message || "")) {
+              skippedCount += 1;
+              return false;
+            }
+            throw err;
+          }
+        };
+
+        // 1. 每日单个任务奖励 taskId 1~10
+        for (let taskId = 1; taskId <= 10; taskId++) {
+          if (shouldStop.value) break;
+          await claimOnce(
+            "task_claimdailypoint",
+            { taskId },
+            `每日任务奖励${taskId}`,
+          );
+        }
+
+        // 2. 每日活跃度宝箱：领到没有更多为止
+        for (let i = 0; i < 10; i++) {
+          if (shouldStop.value) break;
+          const ok = await claimOnce(
+            "task_claimdailyreward",
+            {},
+            "每日活跃度奖励",
+          );
+          if (!ok) break;
+        }
+
+        // 3. 每周活跃度宝箱：领到没有更多为止
+        for (let i = 0; i < 10; i++) {
+          if (shouldStop.value) break;
+          const ok = await claimOnce(
+            "task_claimweekreward",
+            {},
+            "每周活跃度奖励",
+          );
+          if (!ok) break;
+        }
+
+        tokenStatus.value[tokenId] = "completed";
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `=== ${token.name} 活跃度领取完成: 成功${claimedCount} 跳过${skippedCount} ===`,
+          type: claimedCount > 0 ? "success" : "info",
+        });
+      } catch (error) {
+        console.error(error);
+        tokenStatus.value[tokenId] = "failed";
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${token.name} 领取活跃度任务失败: ${error.message}`,
+          type: "error",
+        });
+      } finally {
+        tokenStore.closeWebSocketConnection(tokenId);
+        releaseConnectionSlot();
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+          type: "info",
+        });
+      }
+    });
+
+    await Promise.all(taskPromises);
+
+    isRunning.value = false;
+    currentRunningTokenId.value = null;
+    message.success("批量领取活跃度任务结束");
+  };
+
   return {
     legion_storebuygoods,
     legionStoreBuySkinCoins,
     store_purchase,
     collection_claimfreereward,
+    batchClaimActivity,
   };
 }
