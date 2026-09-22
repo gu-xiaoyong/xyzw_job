@@ -19,6 +19,21 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ==================== 访问鉴权 ====================
+// 除 /health 外全部要求 x-backend-key 与环境变量 BACKEND_KEY 一致：
+// API 上明文存放游戏 Token，必须防止被陌生人读取
+app.use((req, res, next) => {
+ if (req.path === "/health") return next();
+ const key = process.env.BACKEND_KEY;
+ if (!key) {
+ return res.status(500).json({ error: "服务端未配置 BACKEND_KEY，拒绝访问" });
+ }
+ if (req.get("x-backend-key") !== key) {
+ return res.status(401).json({ error: "访问密钥错误" });
+ }
+ next();
+});
+
 // ==================== Supabase 客户端 ====================
 const supabase = createClient(
  process.env.SUPABASE_URL,
@@ -55,6 +70,30 @@ const TASK_DEFINITIONS = {
  { cmd: "legacy_getinfo", params: {} },
  { cmd: "legacy_claimhangup", params: {} },
  ]},
+ activity: { name: "活跃度任务领取", commands: [
+ { cmd: "task_claimdailypoint", params: { taskId: 1 } },
+ { cmd: "task_claimdailypoint", params: { taskId: 2 } },
+ { cmd: "task_claimdailypoint", params: { taskId: 3 } },
+ { cmd: "task_claimdailypoint", params: { taskId: 4 } },
+ { cmd: "task_claimdailypoint", params: { taskId: 5 } },
+ { cmd: "task_claimdailypoint", params: { taskId: 6 } },
+ { cmd: "task_claimdailypoint", params: { taskId: 7 } },
+ { cmd: "task_claimdailypoint", params: { taskId: 8 } },
+ { cmd: "task_claimdailypoint", params: { taskId: 9 } },
+ { cmd: "task_claimdailypoint", params: { taskId: 10 } },
+ { cmd: "task_claimdailyreward", params: { rewardId: 0 } },
+ { cmd: "task_claimweekreward", params: { rewardId: 0 } },
+ ]},
+ apexTask: { name: "逐鹿盐山任务领取", commands: [
+ { cmd: "apex_taskclaim", params: { confId: 1 } },
+ { cmd: "apex_taskclaim", params: { confId: 2 } },
+ { cmd: "apex_taskclaim", params: { confId: 3 } },
+ { cmd: "apex_taskclaim", params: { confId: 4 } },
+ { cmd: "apex_taskclaim", params: { confId: 5 } },
+ { cmd: "apex_taskclaim", params: { confId: 6 } },
+ { cmd: "apex_taskclaim", params: { confId: 7 } },
+ ]},
+ collectionClaim: { name: "领取珍宝阁", commands: [{ cmd: "collection_claimfreereward", params: {} }] },
 };
 
 // ==================== 日志存储 ====================
@@ -334,6 +373,82 @@ app.get("/api/logs/db", async (req, res) => {
 app.get("/api/task-definitions", (req, res) => {
  const list = Object.entries(TASK_DEFINITIONS).map(([key, val]) => ({ key, name: val.name, commands: val.commands.map((c) => c.cmd) }));
  res.json(list);
+});
+
+// ==================== 网页端一键同步 ====================
+// body: { tokens: [{id,name,token}], schedules: [{name,cron_expr,selected_tasks,selected_tokens,enabled}] }
+// tokens 的 token 字段为 parseBase64Token 提取后的 actualToken 明文字符串
+// 全量替换式同步：先删后插，保证云端与页面一致
+app.post("/api/sync", async (req, res) => {
+ const { tokens = [], schedules = [] } = req.body || {};
+ try {
+ // Token 同步
+ const { data: existingTokens } = await supabase.from("tokens").select("id");
+ const existingIds = new Set((existingTokens || []).map((t) => t.id));
+ const incomingIds = new Set(tokens.map((t) => t.id));
+ const toDelete = [...existingIds].filter((id) => !incomingIds.has(id));
+ if (toDelete.length > 0) {
+ await supabase.from("tokens").delete().in("id", toDelete);
+ }
+ if (tokens.length > 0) {
+ const rows = tokens.map((t) => ({
+ id: String(t.id),
+ name: t.name || String(t.id),
+ token: t.token,
+ enabled: true,
+ }));
+ const { error } = await supabase.from("tokens").upsert(rows, { onConflict: "id" });
+ if (error) throw new Error(`Token写入失败: ${error.message}`);
+ }
+
+ // 定时任务同步：全删全插
+ await supabase.from("cron_tasks").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+ let inserted = [];
+ if (schedules.length > 0) {
+ const rows = schedules.map((s) => ({
+ name: s.name || "未命名任务",
+ cron_expr: s.cron_expr,
+ selected_tasks: s.selected_tasks || [],
+ selected_tokens: s.selected_tokens || [],
+ enabled: s.enabled !== false,
+ }));
+ const { data, error } = await supabase.from("cron_tasks").insert(rows).select();
+ if (error) throw new Error(`定时任务写入失败: ${error.message}`);
+ inserted = data || [];
+ }
+
+ await registerAllCrons();
+ addLog("INFO", "sync", `同步完成: ${tokens.length}个Token, ${schedules.length}个定时任务`);
+ res.json({ ok: true, tokens: tokens.length, schedules: inserted.length });
+ } catch (err) {
+ addLog("ERROR", "sync", `同步失败: ${err.message}`);
+ res.status(500).json({ error: err.message });
+ }
+});
+
+// ==================== 单 Token 连通性测试 ====================
+// 连接游戏服务器并取角色信息，用于网页端验证 Token 是否有效
+app.post("/api/tokens/:id/test", async (req, res) => {
+ const { data: token } = await supabase.from("tokens").select("*").eq("id", req.params.id).single();
+ if (!token) return res.status(404).json({ error: "Token不存在" });
+
+ const tokenData = { actualToken: token.token, name: token.name };
+ const client = new GameClient(tokenData, token.ws_url);
+ try {
+ await client.connect(15000);
+ const roleInfo = await client.sendWithPromise("role_getroleinfo", {}, 8000);
+ const role = roleInfo?.role || {};
+ res.json({
+ ok: true,
+ name: role.name || token.name,
+ level: role.level,
+ roleId: role.roleId || role.id,
+ });
+ } catch (err) {
+ res.status(200).json({ ok: false, error: err.message });
+ } finally {
+ client.disconnect();
+ }
 });
 
 const PORT = process.env.PORT || 3000;
