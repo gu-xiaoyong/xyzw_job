@@ -788,9 +788,190 @@ export function createTasksApex(deps) {
     message.success("批量领取逐鹿盐山任务结束");
   };
 
+  /**
+   * 一键批量领取逐鹿盐山竞猜奖励
+   *
+   * 协议已抓包确认（2026-09-22）：apex_guessclaim，参数 { scheduleId, teamId }。
+   * 领取范围 = apexRoleInfo.guessMap（竞猜记录：scheduleId → 已押队伍数组），
+   * 已领取的记录在 guessClaimMap（与 taskClaimedMap 同构）；预测失败/未结束/
+   * 已领取由服务器报状态类错误，静默跳过。
+   */
+  const batchApexClaimGuess = async () => {
+    if (selectedTokens.value.length === 0) return;
+
+    isRunning.value = true;
+    shouldStop.value = false;
+
+    selectedTokens.value.forEach((id) => {
+      tokenStatus.value[id] = "waiting";
+    });
+
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: "=== 逐鹿盐山竞猜奖励领取 v1：按竞猜记录逐个领取，已领跳过 ===",
+      type: "info",
+    });
+
+    const taskPromises = selectedTokens.value.map(async (tokenId) => {
+      if (shouldStop.value) return;
+
+      tokenStatus.value[tokenId] = "running";
+      const token = tokens.value.find((t) => t.id === tokenId);
+
+      try {
+        await ensureConnection(tokenId);
+
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `=== 开始领取逐鹿盐山竞猜奖励: ${token.name} ===`,
+          type: "info",
+        });
+
+        // 1. 取角色信息：guessMap 为竞猜记录，guessClaimMap 为已领取记录
+        const roleResp = await sendApex(
+          ApexAction.READ,
+          (queuedMs) =>
+            tokenStore.sendMessageWithPromise(
+              tokenId,
+              "apex_getroleinfo",
+              {},
+              TIMEOUT_MS + queuedMs,
+            ),
+          READ_MAX_RETRY,
+        );
+        const apexRoleInfo = roleResp?.apexRoleInfo || {};
+        const guessMap = apexRoleInfo.guessMap || {};
+        const guessClaimMap = apexRoleInfo.guessClaimMap || {};
+        const entries = Object.entries(guessMap).filter(
+          ([, teamIds]) => Array.isArray(teamIds) && teamIds.length > 0,
+        );
+
+        if (entries.length === 0) {
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 没有逐鹿盐山竞猜记录`,
+            type: "info",
+          });
+          return;
+        }
+
+        // 2. 逐个领取：已记录领取的跳过，预测失败/未结束由服务器状态类错误跳过
+        let claimedCount = 0;
+        let skippedCount = 0;
+        let failCount = 0;
+        let abortedByRateLimit = false;
+
+        for (const [scheduleId, teamIds] of entries) {
+          if (shouldStop.value) break;
+          if (abortedByRateLimit) break;
+          const claimedTeams = guessClaimMap[scheduleId] || {};
+
+          for (const teamId of teamIds) {
+            if (shouldStop.value) break;
+            if (abortedByRateLimit) break;
+            if (claimedTeams[teamId]) {
+              skippedCount++;
+              continue;
+            }
+
+            try {
+              await runApexAction(
+                ApexAction.CLAIM,
+                (queuedMs) =>
+                  tokenStore.sendMessageWithPromise(
+                    tokenId,
+                    "apex_guessclaim",
+                    { scheduleId: Number(scheduleId), teamId },
+                    TIMEOUT_MS + queuedMs,
+                  ),
+                { maxRetry: READ_MAX_RETRY },
+              );
+              claimedCount++;
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 领取竞猜奖励(${scheduleId}期 ${teamId})成功 ✓`,
+                type: "success",
+              });
+            } catch (err) {
+              const msg = err.message || "未知错误";
+              if (isApexRateLimited(err)) {
+                // 重试仍被限流：停止该账号后续领取，等待自适应间隔恢复
+                abortedByRateLimit = true;
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} 连续被服务器限流（200400），约 ${Math.ceil(apexCooldownLeft(ApexAction.CLAIM) / 1000)}s 后可继续，本次中止剩余领取`,
+                  type: "warning",
+                });
+              } else if (/服务器错误: 200\d{3}\b/.test(msg)) {
+                // 状态类错误（预测失败/未结束/已领取等）：正常情况，静默计数
+                skippedCount++;
+              } else {
+                failCount++;
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} 领取竞猜奖励(${scheduleId}期 ${teamId})失败: ${msg}`,
+                  type: "warning",
+                });
+              }
+            }
+          }
+        }
+
+        if (abortedByRateLimit) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 因服务器限流提前结束，未领取部分稍后重跑即可`,
+            type: "warning",
+          });
+        }
+
+        tokenStatus.value[tokenId] = "completed";
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `=== ${token.name} 竞猜奖励领取完成: 成功${claimedCount} 跳过${skippedCount} 失败${failCount}（共${entries.length}期竞猜记录） ===`,
+          type: claimedCount > 0 ? "success" : "info",
+        });
+      } catch (error) {
+        console.error(error);
+        if (/服务器错误: 200160\b/.test(error.message || "")) {
+          // 活动模块未开启（如等级不足的小号），按跳过处理，不报错误
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 逐鹿盐山活动未开启，跳过`,
+            type: "info",
+          });
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 领取逐鹿盐山竞猜奖励失败: ${error.message}`,
+            type: "error",
+          });
+        }
+      } finally {
+        tokenStore.closeWebSocketConnection(tokenId);
+        releaseConnectionSlot();
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+          type: "info",
+        });
+      }
+    });
+
+    await Promise.all(taskPromises);
+
+    isRunning.value = false;
+    currentRunningTokenId.value = null;
+    message.success("批量领取逐鹿盐山竞猜奖励结束");
+  };
+
   return {
     batchApexGuess,
     batchApexVote,
     batchApexClaimTask,
+    batchApexClaimGuess,
   };
 }

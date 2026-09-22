@@ -419,7 +419,9 @@ export function registerDefaultCommands(reg) {
     .register("apex_getvotelist", { groupId: 1, round: 0, idx: 0 })
     .register("apex_vote", { teamId: "", round: 0, voteCnt: 0 })
     // 逐鹿盐山活跃度任务领取（confId 取值 1~7，抓包确认）
-    .register("apex_taskclaim", { confId: 0 });
+    .register("apex_taskclaim", { confId: 0 })
+    // 逐鹿盐山竞猜奖励领取（预测成功后领奖，抓包确认）
+    .register("apex_guessclaim", { scheduleId: 0, teamId: "" });
   registry.commands.set(
     "fight_startareaarena",
     (ack = 0, seq = 0, params = {}) => {

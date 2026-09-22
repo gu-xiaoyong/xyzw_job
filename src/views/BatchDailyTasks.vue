@@ -452,6 +452,13 @@
                 >
                   逐鹿盐山任务
                 </n-button>
+                <n-button
+                  size="small"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                  @click="batchApexClaimGuess"
+                >
+                  竞猜奖励领取
+                </n-button>
               </n-space>
             </n-tab-pane>
             <n-tab-pane name="weirdTower" tab="怪异塔">
@@ -5715,7 +5722,8 @@ const tasksFootball = createTasksFootball(createTaskDeps());
 const { batchFootballBet } = tasksFootball;
 
 const tasksApex = createTasksApex(createTaskDeps());
-const { batchApexGuess, batchApexVote, batchApexClaimTask } = tasksApex;
+const { batchApexGuess, batchApexVote, batchApexClaimTask, batchApexClaimGuess } =
+  tasksApex;
 
 const tasksCampChallenge = createTasksCampChallenge(createTaskDeps());
 const { batchCampChallenge, batchCampChallengePet, batchCampClaimTasks } = tasksCampChallenge;
