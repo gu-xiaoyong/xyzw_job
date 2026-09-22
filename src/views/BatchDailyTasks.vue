@@ -6255,7 +6255,7 @@ const stopBatch = () => {
 
   /* 收紧页签间距,隐藏原生指示条与导航底边线,避免与按钮重叠 */
   .func-tabs-card :deep(.n-tabs .n-tabs-tab-pad) {
-    width: 3px;
+    width: 4px;
   }
 
   .func-tabs-card :deep(.n-tabs .n-tabs-scroll-padding),
@@ -6275,8 +6275,8 @@ const stopBatch = () => {
   }
 
   .func-tabs-card :deep(.n-tabs .n-tabs-tab) {
-    padding: 6px 4px;
-    font-size: 12px;
+    padding: 6px 5px;
+    font-size: 13px;
     border: 1px solid var(--border-color, #efeff5);
     border-radius: 8px;
     background-color: var(--bg-tertiary, #f7f7fa);
