@@ -49,7 +49,8 @@ const READ_MAX_RETRY = 1;
  * @param {number} [maxRetry] 200400 自动重试次数
  * @returns {Promise<*>} 命令响应
  */
-const sendApex = (action, task, maxRetry) => runApexAction(action, task, { maxRetry });
+const sendApex = (action, task, maxRetry, scope) =>
+  runApexAction(action, task, { maxRetry, scope });
 
 /**
  * 解析当前赛季「竞猜开放中」的阶段页签。
@@ -146,6 +147,7 @@ export function createTasksApex(deps) {
               TIMEOUT_MS + queuedMs,
             ),
           READ_MAX_RETRY,
+          String(tokenId),
         );
         const apexInfo = roleResp?.apexRoleInfo || {};
         const guessMap = apexInfo.guessMap || {};
@@ -460,11 +462,17 @@ export function createTasksApex(deps) {
         });
 
         // 1. 获取角色信息
-        const roleResp = await tokenStore.sendMessageWithPromise(
-          tokenId,
-          "apex_getroleinfo",
-          {},
-          8000,
+        const roleResp = await sendApex(
+          ApexAction.READ,
+          (queuedMs) =>
+            tokenStore.sendMessageWithPromise(
+              tokenId,
+              "apex_getroleinfo",
+              {},
+              TIMEOUT_MS + queuedMs,
+            ),
+          READ_MAX_RETRY,
+          String(tokenId),
         );
         const apexRoleInfo = roleResp?.apexRoleInfo || {};
         const groupMap = apexRoleInfo.group || {};
@@ -674,6 +682,7 @@ export function createTasksApex(deps) {
               TIMEOUT_MS + queuedMs,
             ),
           READ_MAX_RETRY,
+          String(tokenId),
         );
         const apexRoleInfo = roleResp?.apexRoleInfo || {};
         const claimedMap = apexRoleInfo.taskClaimedMap || {};
@@ -839,6 +848,7 @@ export function createTasksApex(deps) {
               TIMEOUT_MS + queuedMs,
             ),
           READ_MAX_RETRY,
+          String(tokenId),
         );
         const apexRoleInfo = roleResp?.apexRoleInfo || {};
         const guessMap = apexRoleInfo.guessMap || {};

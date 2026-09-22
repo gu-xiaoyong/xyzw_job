@@ -27,14 +27,14 @@ export const ApexAction = {
 };
 
 /** 各动作间隔估计值下限（ms）：低于此值基本必被服务器打回 */
-const EST_FLOOR = { read: 300, guess: 1200, vote: 1200, claim: 1000 };
+const EST_FLOOR = { read: 300, guess: 1200, vote: 1200, claim: 800 };
 
 /** 间隔估计值上限（ms）：超过 15s 多为异常/全局限流，不再无脑拉长 */
 const EST_CEIL = 15000;
 
 /** 间隔估计初始值（ms）：竞猜/助威对齐服务器实测冷却（约 3~5s）；
  * 任务领取对齐游戏客户端实测连领间隔（抓包 1.3s/个未限流），整体提速 */
-const EST_DEFAULT = { read: 600, guess: 3000, vote: 3000, claim: 1500 };
+const EST_DEFAULT = { read: 600, guess: 3000, vote: 3000, claim: 1200 };
 
 /** 排期余量（ms）：避免贴边触发 200400 */
 const EST_MARGIN = 200;
@@ -48,8 +48,9 @@ const EST_SHRINK = 200;
 /** 连续成功多少次才下调一次（避免在边界上反复抖动） */
 const OK_BEFORE_SHRINK = 3;
 
-/** 任意两条 apex 命令之间的最小间隔（ms，全局跨账号）：claim 交错 500ms 防并发突发 */
-const MIN_CMD_GAP = { read: 200, guess: 200, vote: 200, claim: 500 };
+/** 任意两条 apex 命令之间的最小间隔（ms，全局跨账号）：实测按账号限流，
+ * claim 交错 300ms 已足够打散突发 */
+const MIN_CMD_GAP = { read: 200, guess: 200, vote: 200, claim: 300 };
 
 /** 单条命令遇到 200400 后的最大自动重试次数 */
 const MAX_RETRY = 3;
@@ -188,8 +189,9 @@ const serialize = (task) => {
   return run;
 };
 
-/** 允许按账号并行发送的动作（各自排期，不进全局串行链）；其余动作全局串行 */
-const PARALLEL_ACTIONS = new Set([ApexAction.CLAIM]);
+/** 允许按账号并行发送的动作（各自排期，不进全局串行链）；其余动作全局串行。
+ * READ 仅批量领取的开局 roleinfo 带 scope 并行；竞猜分页等不带 scope 仍串行 */
+const PARALLEL_ACTIONS = new Set([ApexAction.CLAIM, ApexAction.READ]);
 
 /**
  * 发送一条 apex 命令。
