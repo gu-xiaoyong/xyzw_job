@@ -438,6 +438,10 @@
                     一键竞猜({{ footballPickLabel }})
                   </n-button>
                 </n-popselect>
+              </n-space>
+            </n-tab-pane>
+            <n-tab-pane name="apex" tab="逐鹿盐山">
+              <n-space>
                 <n-button
                   size="small"
                   :disabled="isRunning || selectedTokens.length === 0"
