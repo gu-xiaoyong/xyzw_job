@@ -425,6 +425,10 @@
                 >
                   一键购买梦境商品
                 </n-button>              
+              </n-space>
+            </n-tab-pane>
+            <n-tab-pane name="apex" tab="逐鹿盐山">
+              <n-space>
                 <n-popselect
                   :value="footballPick"
                   :options="footballPickOptions"
@@ -438,10 +442,6 @@
                     一键竞猜({{ footballPickLabel }})
                   </n-button>
                 </n-popselect>
-              </n-space>
-            </n-tab-pane>
-            <n-tab-pane name="apex" tab="逐鹿盐山">
-              <n-space>
                 <n-button
                   size="small"
                   :disabled="isRunning || selectedTokens.length === 0"
@@ -6240,7 +6240,7 @@ const stopBatch = () => {
     flex-wrap: wrap;
   }
 
-  /* 手机端:页签改为紧凑按钮,流式排布放不下自动换行(第一行约6个) */
+  /* 手机端:页签改为紧凑按钮,流式排布放不下自动换行(七个一行放得下) */
   .func-tabs-card :deep(.n-card__content) {
     padding: 12px;
   }
@@ -6255,7 +6255,7 @@ const stopBatch = () => {
 
   /* 收紧页签间距,隐藏原生指示条与导航底边线,避免与按钮重叠 */
   .func-tabs-card :deep(.n-tabs .n-tabs-tab-pad) {
-    width: 4px;
+    width: 3px;
   }
 
   .func-tabs-card :deep(.n-tabs .n-tabs-scroll-padding),
@@ -6275,8 +6275,8 @@ const stopBatch = () => {
   }
 
   .func-tabs-card :deep(.n-tabs .n-tabs-tab) {
-    padding: 6px 5px;
-    font-size: 13px;
+    padding: 6px 4px;
+    font-size: 12px;
     border: 1px solid var(--border-color, #efeff5);
     border-radius: 8px;
     background-color: var(--bg-tertiary, #f7f7fa);
