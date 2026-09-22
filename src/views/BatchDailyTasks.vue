@@ -6275,7 +6275,7 @@ const stopBatch = () => {
   }
 
   .func-tabs-card :deep(.n-tabs .n-tabs-tab) {
-    padding: 6px 5px;
+    padding: 6px 3px;
     font-size: 13px;
     border: 1px solid var(--border-color, #efeff5);
     border-radius: 8px;
