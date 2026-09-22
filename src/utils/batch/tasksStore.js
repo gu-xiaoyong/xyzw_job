@@ -368,31 +368,43 @@ export function createTasksStore(deps) {
         }
       } catch (error) {
         console.error(error);
-        // 小号（等级<4001）黑市未解锁，采购失败属正常情况，不打印错误日志
-        let isAltAccount = false;
-        try {
-          const roleInfo = await tokenStore.sendMessageWithPromise(
-            tokenId,
-            "role_getroleinfo",
-            {},
-            8000,
-          );
-          const level = roleInfo?.role?.level;
-          if (level !== undefined && Number(level) < 4001) {
-            isAltAccount = true;
-          }
-        } catch {
-          // 取不到等级时按普通失败处理
-        }
-        if (isAltAccount) {
+        // 1300040 = 黑市无货/条件不满足等正常状态（对齐 dailyTaskRunner 分类），全员降级 info
+        const codeMatch = /服务器错误: (\d+)/.exec(error.message || "");
+        const errorCode = error?.code ?? (codeMatch ? Number(codeMatch[1]) : null);
+        if (errorCode === 1300040 || errorCode === 200020) {
           tokenStatus.value[tokenId] = "completed";
-        } else {
-          tokenStatus.value[tokenId] = "failed";
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `${token.name} 黑市采购过程出错: ${error.message}`,
-            type: "error",
+            message: `${token.name} 黑市暂无可采购商品`,
+            type: "info",
           });
+        } else {
+          // 小号（等级<4001）黑市未解锁，采购失败属正常情况，不打印错误日志
+          let isAltAccount = false;
+          try {
+            const roleInfo = await tokenStore.sendMessageWithPromise(
+              tokenId,
+              "role_getroleinfo",
+              {},
+              8000,
+            );
+            const level = roleInfo?.role?.level;
+            if (level !== undefined && Number(level) < 4001) {
+              isAltAccount = true;
+            }
+          } catch {
+            // 取不到等级时按普通失败处理
+          }
+          if (isAltAccount) {
+            tokenStatus.value[tokenId] = "completed";
+          } else {
+            tokenStatus.value[tokenId] = "failed";
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 黑市采购过程出错: ${error.message}`,
+              type: "error",
+            });
+          }
         }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
