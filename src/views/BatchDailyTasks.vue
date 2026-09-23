@@ -3513,6 +3513,7 @@ const taskGroupDefinitions = [
       "batchCampClaimTasks",
       "store_purchase",
       "collection_claimfreereward",
+      "batchClaimActivity",
       "batchGenieSweep",
       "batchXuanwuBlessing",
     ],
@@ -3526,6 +3527,16 @@ const taskGroupDefinitions = [
       "skinChallenge",
       "batchClaimPeachTasks",
       "batchBuyDreamItems",
+    ],
+  },
+  {
+    name: "apex",
+    label: "逐鹿盐山",
+    tasks: [
+      "batchApexGuess",
+      "batchApexVote",
+      "batchApexClaimTask",
+      "batchApexClaimGuess",
     ],
   },
   {
