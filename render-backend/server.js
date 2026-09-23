@@ -438,28 +438,48 @@ app.post("/api/sync", async (req, res) => {
 });
 
 // ==================== 单 Token 连通性测试 ====================
-// 连接游戏服务器并取角色信息，用于网页端验证 Token 是否有效
+// 依次尝试多种 WebSocket 握手头组合（游戏网关可能按 UA/Origin 过滤非浏览器客户端），
+// 哪种组合能收到 role_getroleinfo 响应就用哪种，并回传命中的组合名
+const WS_UA =
+ "Mozilla/5.0 (Linux; Android 12; ALN-AL80 Build/HUAWEIALN-AL80; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/114.0.5735.196 Mobile Safari/537.36";
+const WS_VARIANTS = [
+ { name: "bare", wsOpts: {} },
+ { name: "mobile-ua", wsOpts: { headers: { "User-Agent": WS_UA } } },
+ { name: "mobile-ua+origin-null", wsOpts: { headers: { "User-Agent": WS_UA, Origin: "null" } } },
+ { name: "mobile-ua+origin-game", wsOpts: { headers: { "User-Agent": WS_UA, Origin: "https://xxz-xyzw.hortorgames.com" } } },
+];
+
 app.post("/api/tokens/:id/test", async (req, res) => {
  const { data: token } = await supabase.from("tokens").select("*").eq("id", req.params.id).single();
  if (!token) return res.status(404).json({ error: "Token不存在" });
 
+ let lastErr = "未知";
+ for (const v of WS_VARIANTS) {
  const tokenData = { actualToken: token.token, name: token.name };
- const client = new GameClient(tokenData, token.ws_url);
+ const client = new GameClient(tokenData, token.ws_url, v.wsOpts);
  try {
- await client.connect(15000);
+ await client.connect(10000);
+ try {
  const roleInfo = await client.sendWithPromise("role_getroleinfo", {}, 8000);
  const role = roleInfo?.role || {};
- res.json({
+ client.disconnect();
+ return res.json({
  ok: true,
+ variant: v.name,
  name: role.name || token.name,
  level: role.level,
  roleId: role.roleId || role.id,
  });
- } catch (err) {
- res.status(200).json({ ok: false, error: err.message });
- } finally {
+ } catch (e) {
  client.disconnect();
+ lastErr = `${v.name}: ${e.message}`;
  }
+ } catch (e) {
+ client.disconnect();
+ lastErr = `${v.name}: ${e.message}`;
+ }
+ }
+ res.status(200).json({ ok: false, error: lastErr });
 });
 
 const PORT = process.env.PORT || 3000;

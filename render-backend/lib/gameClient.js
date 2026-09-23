@@ -137,8 +137,9 @@ const RESP_MAP = {
 };
 
 class GameClient {
- constructor(tokenData, wsUrl) {
+ constructor(tokenData, wsUrl, wsOptions = {}) {
  this.token = tokenData;
+ this._wsOptions = wsOptions;
  // 与浏览器端一致：p = 实际 token 字符串（parseBase64Token 提取后的 actualToken），
  // 不是 JSON 对象——旧实现拼 JSON 会导致服务器握手失败
  const actualToken =
@@ -175,7 +176,7 @@ class GameClient {
  }
 
  try {
- this.ws = new WebSocket(this._wsUrl);
+ this.ws = new WebSocket(this._wsUrl, this._wsOptions);
  } catch (err) {
  clearTimeout(timer);
  reject(err);
