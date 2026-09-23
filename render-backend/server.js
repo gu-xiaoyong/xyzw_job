@@ -189,7 +189,7 @@ async function executeTask(task) {
  }
 
  tokenData.name = token.name;
- const client = new GameClient(tokenData, token.ws_url);
+ const client = new GameClient(tokenData, token.ws_url, WORKING_WS_OPTS || {});
 
  try {
  await client.connect(15000);
@@ -449,6 +449,10 @@ const WS_VARIANTS = [
  { name: "mobile-ua+origin-game", wsOpts: { headers: { "User-Agent": WS_UA, Origin: "https://xxz-xyzw.hortorgames.com" } } },
 ];
 
+// 探测命中的可用连接方式(测试接口固化), 定时执行时优先使用
+let WORKING_WS_OPTS = null;
+let WORKING_VARIANT = "";
+
 app.post("/api/tokens/:id/test", async (req, res) => {
  const { data: token } = await supabase.from("tokens").select("*").eq("id", req.params.id).single();
  if (!token) return res.status(404).json({ error: "Token不存在" });
@@ -460,9 +464,19 @@ app.post("/api/tokens/:id/test", async (req, res) => {
  try {
  await client.connect(10000);
  try {
- const roleInfo = await client.sendWithPromise("role_getroleinfo", {}, 8000);
- const role = roleInfo?.role || {};
+ // 关键: 必须连续活过多条命令。游戏服务器对部分连接只应答第一条就掐线,
+ // 单条成功会误判为可用(首条后 ~1s 连接即被关闭)
+ await client.sendWithPromise("role_getroleinfo", {}, 8000);
+ await sleep(1000);
+ await client.sendWithPromise("tower_getinfo", {}, 8000);
+ await sleep(1000);
+ const third = await client.sendWithPromise("role_getroleinfo", {}, 8000);
+ const role = third?.role || {};
  client.disconnect();
+ // 命中可用组合: 固化为后续定时执行的默认连接方式
+ WORKING_WS_OPTS = v.wsOpts;
+ WORKING_VARIANT = v.name;
+ addLog("INFO", "probe", `Token ${token.name} 命中可用连接组合: ${v.name}`);
  return res.json({
  ok: true,
  variant: v.name,
