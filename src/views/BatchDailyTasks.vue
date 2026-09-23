@@ -3956,33 +3956,43 @@ const cloudSync = async () => {
   }
 
   const skippedTypes = new Set();
-  const schedules = [];
-  for (const task of scheduledTasks.value) {
-    const selectedTasks = (task.selectedTasks || [])
-      .map((v) => CLOUD_TASK_MAP[v])
-      .filter(Boolean);
-    (task.selectedTasks || []).forEach((v) => {
-      if (!CLOUD_TASK_MAP[v]) skippedTypes.add(v);
-    });
-    const selectedTokens = (task.selectedTokens || []).filter((id) =>
-      tokens.value.some((t) => t.id === id),
-    );
-    if (selectedTasks.length === 0 || selectedTokens.length === 0) continue;
+    let cronParseFailed = 0;
+    const schedules = [];
+    for (const task of scheduledTasks.value) {
+      const selectedTasks = (task.selectedTasks || [])
+        .map((v) => CLOUD_TASK_MAP[v])
+        .filter(Boolean);
+      (task.selectedTasks || []).forEach((v) => {
+        if (!CLOUD_TASK_MAP[v]) skippedTypes.add(v);
+      });
+      const selectedTokens = (task.selectedTokens || []).filter((id) =>
+        tokens.value.some((t) => t.id === id),
+      );
+      if (selectedTasks.length === 0 || selectedTokens.length === 0) continue;
 
-    let cronExpr = task.cronExpression || "";
-    if (task.runType === "daily") {
-      const d = task.runTime ? new Date(task.runTime) : null;
-      if (!d) continue;
-      cronExpr = `0 ${d.getMinutes()} ${d.getHours()} * * *`;
+      let cronExpr = task.cronExpression || "";
+      if (task.runType === "daily") {
+        // runTime 存的是 "00:10:00" 文本（toLocaleTimeString）或时间戳，统一提取时分
+        const m = String(task.runTime || "").match(/(\d{1,2}):(\d{2})/);
+        if (!m) {
+          cronParseFailed += 1;
+          continue;
+        }
+        const hh = String(Number(m[1])).padStart(2, "0");
+        cronExpr = `0 ${m[2]} ${hh} * * *`;
+      }
+      if (!cronExpr) {
+        cronParseFailed += 1;
+        continue;
+      }
+      schedules.push({
+        name: task.name,
+        cron_expr: cronExpr,
+        selected_tasks: selectedTasks,
+        selected_tokens: selectedTokens,
+        enabled: task.enabled !== false,
+      });
     }
-    schedules.push({
-      name: task.name,
-      cron_expr: cronExpr,
-      selected_tasks: selectedTasks,
-      selected_tokens: selectedTokens,
-      enabled: task.enabled !== false,
-    });
-  }
 
   const tokenRows = tokens.value
     .map((t) => ({
@@ -3994,10 +4004,16 @@ const cloudSync = async () => {
 
   if (schedules.length === 0) {
     cloudStatusOk.value = false;
-    const hint = skippedTypes.size
-      ? `（${[...skippedTypes].join("、")} 等复杂任务云端暂不支持）`
-      : "";
-    cloudStatus.value = `没有可同步的定时任务${hint}`;
+    const hints = [];
+    if (cronParseFailed)
+      hints.push(`${cronParseFailed} 个任务的运行时间无法解析（请重新编辑保存一次定时任务）`);
+    if (skippedTypes.size)
+      hints.push(
+        `${[...skippedTypes]
+          .map((v) => availableTasks.find((t) => t.value === v)?.label || v)
+          .join("、")} 等复杂任务云端暂不支持`,
+      );
+    cloudStatus.value = `没有可同步的定时任务${hints.length ? "：" + hints.join("；") : ""}`;
     return;
   }
 
@@ -4017,7 +4033,12 @@ const cloudSync = async () => {
     cloudStatusOk.value = true;
     cloudStatus.value =
       `同步成功：${data.tokens} 个 Token、${data.schedules} 个定时任务已上传` +
-      `，云端将按计划自动执行`;
+      `，云端已注册 ${data.activeCrons} 个定时器`;
+    if (data.failed?.length) {
+      cloudStatus.value += `。注册失败：${data.failed
+        .map((f) => `${f.name}（${f.reason}）`)
+        .join("、")}`;
+    }
     if (skippedTypes.size) {
       const labels = [...skippedTypes]
         .map((v) => availableTasks.find((t) => t.value === v)?.label || v)

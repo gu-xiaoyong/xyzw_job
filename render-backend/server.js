@@ -401,25 +401,36 @@ app.post("/api/sync", async (req, res) => {
  if (error) throw new Error(`Token写入失败: ${error.message}`);
  }
 
- // 定时任务同步：全删全插
+ // 定时任务同步：全删全插；cron 表达式逐条校验，无效的收集后回传
  await supabase.from("cron_tasks").delete().neq("id", "00000000-0000-0000-0000-000000000000");
  let inserted = [];
+ const failed = [];
  if (schedules.length > 0) {
- const rows = schedules.map((s) => ({
+ const rows = [];
+ for (const s of schedules) {
+ const expr = s.cron_expr || "";
+ if (!expr || cron.validate(expr) !== true) {
+ failed.push({ name: s.name || "未命名任务", reason: `无效表达式 "${expr}"` });
+ continue;
+ }
+ rows.push({
  name: s.name || "未命名任务",
- cron_expr: s.cron_expr,
+ cron_expr: expr,
  selected_tasks: s.selected_tasks || [],
  selected_tokens: s.selected_tokens || [],
  enabled: s.enabled !== false,
- }));
+ });
+ }
+ if (rows.length > 0) {
  const { data, error } = await supabase.from("cron_tasks").insert(rows).select();
  if (error) throw new Error(`定时任务写入失败: ${error.message}`);
  inserted = data || [];
  }
+ }
 
  await registerAllCrons();
- addLog("INFO", "sync", `同步完成: ${tokens.length}个Token, ${schedules.length}个定时任务`);
- res.json({ ok: true, tokens: tokens.length, schedules: inserted.length });
+ addLog("INFO", "sync", `同步完成: ${tokens.length}个Token, ${inserted.length}个定时任务, 失败${failed.length}个`);
+ res.json({ ok: true, tokens: tokens.length, schedules: inserted.length, activeCrons: cronJobs.size, failed });
  } catch (err) {
  addLog("ERROR", "sync", `同步失败: ${err.message}`);
  res.status(500).json({ error: err.message });
