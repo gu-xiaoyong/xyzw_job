@@ -55,12 +55,53 @@ export function createTasksLegacy(deps) {
         });
         await ensureConnection(tokenId);
 
-        const LegacyClaimHangUpResp = await tokenStore.sendMessageWithPromise(
-          tokenId,
-          "legacy_claimhangup",
-          {},
-          5000,
-        );
+        // 新赛季后功法挂机需重新打开: 开关开启时先读取功法信息尝试触发赛季挂机状态
+        // (对齐游戏内打开功法页的行为, 纯读取无副作用), 读取失败不阻断领取
+        if (batchSettings.legacyAutoOpen) {
+          try {
+            await tokenStore.sendMessageWithPromise(
+              tokenId,
+              "legacy_getinfo",
+              {},
+              8000,
+            );
+            await new Promise((r) => setTimeout(r, 500));
+          } catch {
+            // 忽略, 继续直接领取
+          }
+        }
+
+        let LegacyClaimHangUpResp;
+        try {
+          LegacyClaimHangUpResp = await tokenStore.sendMessageWithPromise(
+            tokenId,
+            "legacy_claimhangup",
+            {},
+            5000,
+          );
+        } catch (claimErr) {
+          const firstCodeMatch = /服务器错误: (\d+)/.exec(claimErr.message || "");
+          const firstErrorCode =
+            claimErr?.code ?? (firstCodeMatch ? Number(firstCodeMatch[1]) : null);
+          // 200020 = 暂无可领取, 无需补领; 开关关闭时也不补领
+          if (!batchSettings.legacyAutoOpen || firstErrorCode === 200020) {
+            throw claimErr;
+          }
+          // 开关开启: 再读一次功法信息后补领一次(覆盖赛季状态懒加载)
+          await tokenStore.sendMessageWithPromise(
+            tokenId,
+            "legacy_getinfo",
+            {},
+            8000,
+          ).catch(() => {});
+          await new Promise((r) => setTimeout(r, 800));
+          LegacyClaimHangUpResp = await tokenStore.sendMessageWithPromise(
+            tokenId,
+            "legacy_claimhangup",
+            {},
+            5000,
+          );
+        }
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `=== ${token.name} 成功领取功法残卷${LegacyClaimHangUpResp.reward[0].value}，共有${LegacyClaimHangUpResp.role.items[37007].quantity}个`,

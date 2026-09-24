@@ -657,7 +657,7 @@
               </n-space>
             </n-tab-pane>
             <n-tab-pane name="legacy" tab="功法">
-              <n-space>
+              <n-space align="center">
                 <n-button
                   size="small"
                   @click="batchLegacyClaim"
@@ -672,6 +672,13 @@
                 >
                   批量功法残卷赠送
                 </n-button>
+                <n-switch
+                  v-model:value="batchSettings.legacyAutoOpen"
+                  size="small"
+                  @update:value="persistLegacySwitch"
+                >
+                  <template #default>新赛季开启挂机</template>
+                </n-switch>
               </n-space>
             </n-tab-pane>
             <n-tab-pane name="monthly" tab="月度">
@@ -3846,6 +3853,7 @@ const loadBatchSettings = () => {
     }
     batchSettings.cdkCodes = batchSettings.cdkCodes || "";
     batchSettings.cdkPlatformType = batchSettings.cdkPlatformType || "h5";
+    batchSettings.legacyAutoOpen = batchSettings.legacyAutoOpen ?? false;
     batchSettings.blackMarketPurchaseList = normalizeBlackMarketPurchaseList(
       batchSettings.blackMarketPurchaseList?.length
         ? batchSettings.blackMarketPurchaseList
@@ -3865,6 +3873,15 @@ const saveBatchSettings = () => {
   } catch (error) {
     console.error("Failed to save batch settings:", error);
     message.error("保存设置失败");
+  }
+};
+
+// 功法新赛季挂机开关: 切换即持久化(不经设置弹窗)
+const persistLegacySwitch = () => {
+  try {
+    localStorage.setItem("batchSettings", JSON.stringify(batchSettings));
+  } catch (error) {
+    console.error("Failed to save legacy switch:", error);
   }
 };
 

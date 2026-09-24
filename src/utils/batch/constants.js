@@ -142,6 +142,7 @@ export const defaultBatchSettings = {
   maxLogEntries: 1000,
   cdkCodes: "",
   cdkPlatformType: "h5",
+  legacyAutoOpen: false,
 };
 
 // 默认模板
