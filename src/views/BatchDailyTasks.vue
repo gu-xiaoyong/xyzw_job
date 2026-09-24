@@ -317,6 +317,13 @@
                 </n-button>
                 <n-button
                   size="small"
+                  @click="openApplyLegionModal"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                >
+                  批量申请俱乐部
+                </n-button>
+                <n-button
+                  size="small"
                   @click="batchStudy"
                   :disabled="isRunning || selectedTokens.length === 0"
                 >
@@ -2059,6 +2066,21 @@
               </n-tabs>
             </n-checkbox-group>
           </div>
+          <div
+            v-if="taskForm.selectedTasks.includes('batchApplyLegion')"
+            class="setting-item"
+          >
+            <label class="setting-label">目标俱乐部ID</label>
+            <n-input-number
+              v-model:value="taskForm.legionApplyTargetId"
+              placeholder="请输入目标俱乐部ID"
+              :min="1"
+              clearable
+            />
+            <div style="font-size: 12px; color: #86909c">
+              定时执行“批量申请俱乐部”时会对所有选中账号申请这个俱乐部。
+            </div>
+          </div>
         </div>
         <div class="modal-actions" style="margin-top: 20px; text-align: right">
           <n-button @click="showTaskModal = false" style="margin-right: 12px"
@@ -2604,6 +2626,130 @@
         </div>
         <div class="modal-actions" style="margin-top: 20px; text-align: right">
           <n-button @click="showWarGuessModal = false">关闭</n-button>
+        </div>
+      </div>
+    </n-modal>
+
+    <!-- Batch Apply Legion Modal -->
+    <n-modal
+      v-model:show="showApplyLegionModal"
+      preset="card"
+      title="批量申请俱乐部"
+      style="width: 90%; max-width: 720px"
+    >
+      <div class="settings-content">
+        <div class="settings-grid" style="display: block">
+          <div
+            style="
+              margin-bottom: 16px;
+              display: flex;
+              align-items: center;
+              gap: 12px;
+              flex-wrap: wrap;
+            "
+          >
+            <span style="font-size: 16px">俱乐部ID:</span>
+            <n-input-number
+              v-model:value="applyLegionTargetId"
+              placeholder="请输入俱乐部ID"
+              :min="1"
+              clearable
+              style="width: 180px"
+            />
+            <n-button
+              @click="fetchApplyLegionTargetInfo"
+              :loading="applyLegionLoading"
+            >
+              查询俱乐部
+            </n-button>
+            <n-button
+              type="primary"
+              @click="handleBatchApplyLegion"
+              :disabled="!applyLegionPreview?.id || isRunning"
+            >
+              发起申请
+            </n-button>
+          </div>
+
+          <div
+            style="
+              margin-bottom: 12px;
+              padding: 12px;
+              border-radius: 8px;
+              background: #f8f9fa;
+              border: 1px solid #e9ecef;
+              color: #666;
+            "
+          >
+            仅会对当前未加入俱乐部的账号发申请，已加入任意俱乐部的账号会自动跳过。
+          </div>
+
+          <n-alert
+            v-if="applyLegionError"
+            type="error"
+            :show-icon="true"
+            style="margin-bottom: 16px"
+          >
+            {{ applyLegionError }}
+          </n-alert>
+
+          <div
+            v-if="applyLegionPreview"
+            style="
+              display: flex;
+              gap: 16px;
+              align-items: flex-start;
+              padding: 16px;
+              border: 1px solid #e5e7eb;
+              border-radius: 10px;
+              background: white;
+            "
+          >
+            <img
+              :src="applyLegionPreview.logo || ''"
+              alt="俱乐部头像"
+              style="
+                width: 64px;
+                height: 64px;
+                border-radius: 50%;
+                object-fit: cover;
+                background: #f3f4f6;
+                border: 1px solid #e5e7eb;
+              "
+            />
+            <div style="flex: 1; min-width: 0">
+              <div
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  gap: 12px;
+                  flex-wrap: wrap;
+                  margin-bottom: 8px;
+                "
+              >
+                <div style="font-size: 18px; font-weight: 600">
+                  {{ applyLegionPreview.name }}
+                </div>
+                <n-tag type="info">ID: {{ applyLegionPreview.id }}</n-tag>
+              </div>
+              <div style="display: flex; gap: 16px; flex-wrap: wrap; color: #666">
+                <span>等级: {{ applyLegionPreview.level || 0 }}</span>
+                <span>成员数: {{ applyLegionPreview.memberCount || 0 }}</span>
+                <span v-if="applyLegionPreview.chairmanName">
+                  会长: {{ applyLegionPreview.chairmanName }}
+                </span>
+              </div>
+              <div
+                v-if="applyLegionPreview.notice"
+                style="margin-top: 10px; color: #666; line-height: 1.5"
+              >
+                公告: {{ applyLegionPreview.notice }}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions" style="margin-top: 20px; text-align: right">
+          <n-button @click="showApplyLegionModal = false">关闭</n-button>
         </div>
       </div>
     </n-modal>
@@ -3351,6 +3497,86 @@ const handleWarGuessCheer = async () => {
   await batchWarGuessCheer(selectedWarGuessLegionId.value, warGuessCoin.value);
 };
 
+// ======================
+// Batch Apply Legion Feature
+// ======================
+const showApplyLegionModal = ref(false);
+const applyLegionTargetId = ref(null);
+const applyLegionPreview = ref(null);
+const applyLegionLoading = ref(false);
+const applyLegionError = ref("");
+
+const openApplyLegionModal = () => {
+  showApplyLegionModal.value = true;
+  applyLegionError.value = "";
+  applyLegionPreview.value = null;
+};
+
+const fetchApplyLegionTargetInfo = async () => {
+  if (selectedTokens.value.length === 0) {
+    message.warning("请先选择一个账号用于查询俱乐部");
+    return;
+  }
+
+  if (!applyLegionTargetId.value) {
+    message.warning("请先输入俱乐部ID");
+    return;
+  }
+
+  const tokenId = selectedTokens.value[0];
+  const token = tokens.value.find((t) => t.id === tokenId);
+
+  applyLegionLoading.value = true;
+  applyLegionError.value = "";
+  applyLegionPreview.value = null;
+
+  try {
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `正在使用 ${token.name} 查询俱乐部 ${applyLegionTargetId.value}...`,
+      type: "info",
+    });
+
+    const status = tokenStore.getWebSocketStatus(tokenId);
+    if (status !== "connected") {
+      tokenStore.createWebSocketConnection(tokenId, token.token, token.wsUrl);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+
+    applyLegionPreview.value = await queryLegionById(
+      tokenId,
+      applyLegionTargetId.value,
+    );
+
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `已查询到目标俱乐部: ${applyLegionPreview.value.name} (${applyLegionPreview.value.id})`,
+      type: "success",
+    });
+  } catch (error) {
+    console.error("Fetch legion info error:", error);
+    applyLegionError.value = error.message || "查询俱乐部失败";
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `查询俱乐部失败: ${applyLegionError.value}`,
+      type: "error",
+    });
+    message.error(applyLegionError.value);
+  } finally {
+    applyLegionLoading.value = false;
+  }
+};
+
+const handleBatchApplyLegion = async () => {
+  if (!applyLegionPreview.value?.id) {
+    message.warning("请先查询并确认目标俱乐部");
+    return;
+  }
+
+  showApplyLegionModal.value = false;
+  await batchApplyLegion(applyLegionPreview.value.id);
+};
+
 // Settings Modal State
 const showSettingsModal = ref(false);
 const currentSettingsTokenId = ref(null);
@@ -3553,6 +3779,7 @@ const taskForm = reactive({
   cronExpression: "", // Cron expression for complex scheduling
   selectedTokens: [], // Selected token IDs
   selectedTasks: [], // Selected task function names
+  legionApplyTargetId: null, // Target legion for batchApplyLegion
   enabled: true, // Whether the task is enabled
 });
 
@@ -3568,6 +3795,7 @@ const taskGroupDefinitions = [
       "resetBottles",
       "batchlingguanzi",
       "batchclubsign",
+      "batchApplyLegion",
       "batchStudy",
       "batcharenafight",
       "batchCampChallenge",
@@ -3737,6 +3965,7 @@ const openTaskModal = () => {
     cronExpression: "",
     selectedTokens: [],
     selectedTasks: [],
+    legionApplyTargetId: null,
     enabled: true,
   });
   taskScheduleSelectedGroupIds.value = [];
@@ -3762,6 +3991,16 @@ const editTask = (task) => {
       minutes,
     );
   }
+  Object.assign(taskForm, {
+    name: "",
+    runType: "daily",
+    runTime: undefined,
+    cronExpression: "",
+    selectedTokens: [],
+    selectedTasks: [],
+    legionApplyTargetId: null,
+    enabled: true,
+  });
   Object.assign(taskForm, taskData);
   taskScheduleSelectedGroupIds.value = [];
   showTaskModal.value = true;
@@ -3835,6 +4074,14 @@ const saveTask = () => {
     return;
   }
 
+  if (
+    taskForm.selectedTasks.includes("batchApplyLegion") &&
+    !Number(taskForm.legionApplyTargetId)
+  ) {
+    message.warning("请为批量申请俱乐部任务填写目标俱乐部ID");
+    return;
+  }
+
   // Format runTime as string for storage
   let formattedRunTime = null;
   if (taskForm.runType === "daily" && taskForm.runTime) {
@@ -3854,6 +4101,7 @@ const saveTask = () => {
     cronExpression: taskForm.runType === "cron" ? taskForm.cronExpression : "",
     selectedTokens: [...taskForm.selectedTokens],
     selectedTasks: [...taskForm.selectedTasks],
+    legionApplyTargetId: Number(taskForm.legionApplyTargetId || 0) || null,
     enabled: taskForm.enabled,
   };
 
@@ -4845,6 +5093,18 @@ const verifyTaskDependencies = async (task) => {
     }
   }
 
+  if (
+    task.selectedTasks.includes("batchApplyLegion") &&
+    !Number(task.legionApplyTargetId)
+  ) {
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `=== 定时任务 ${task.name} 缺少目标俱乐部ID ===`,
+      type: "error",
+    });
+    return false;
+  }
+
   // 直接使用所有选中的token，WebSocket连接由具体任务函数内部管理
   // ensureConnection函数会自动处理并行连接和连接池管理
   const connectedTokens = task.selectedTokens.map((tokenId) => {
@@ -4990,6 +5250,8 @@ const executeScheduledTask = async (task) => {
           ].includes(taskName)
         ) {
           await taskFunction(true);
+        } else if (taskName === "batchApplyLegion") {
+          await taskFunction(task.legionApplyTargetId);
         } else {
           await taskFunction();
         }
@@ -6138,7 +6400,9 @@ const {
   batchAddHangUpTime,
   batchStudy,
   batchclubsign,
+  batchApplyLegion,
   batchWarGuessCheer,
+  queryLegionById,
 } = tasksHangUp;
 
 const tasksBottle = createTasksBottle(createTaskDeps());
