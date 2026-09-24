@@ -92,6 +92,7 @@ const TASK_DEFINITIONS = {
  { cmd: "apex_taskclaim", params: { confId: 7 } },
  ]},
  collectionClaim: { name: "领取珍宝阁", commands: [{ cmd: "collection_claimfreereward", params: {} }] },
+ blackMarketPurchase: { name: "黑市采购", commands: [{ cmd: "store_purchase", params: { goodsId: 1 } }] },
 };
 
 // ==================== 日志存储 ====================

@@ -4189,6 +4189,7 @@ const CLOUD_TASK_MAP = {
   batchclubsign: "legionSignIn",
   batchGenieSweep: "genieSweep",
   collection_claimfreereward: "collectionClaim",
+  store_purchase: "blackMarketPurchase",
   batchLegacyClaim: "legacyHangup",
   batchClaimActivity: "activity",
   batchApexClaimTask: "apexTask",
