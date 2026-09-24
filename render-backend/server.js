@@ -93,6 +93,13 @@ const TASK_DEFINITIONS = {
  ]},
  collectionClaim: { name: "领取珍宝阁", commands: [{ cmd: "collection_claimfreereward", params: {} }] },
  blackMarketPurchase: { name: "黑市采购", commands: [{ cmd: "store_purchase", params: { goodsId: 1 } }] },
+ campTaskClaim: { name: "营地任务奖励领取", commands: [
+ { cmd: "club_getinfo", params: {} },
+ { cmd: "club_taskclaim", params: { confId: 1 } },
+ { cmd: "club_taskclaim", params: { confId: 2 } },
+ { cmd: "club_taskclaim", params: { confId: 3 } },
+ { cmd: "club_taskclaim", params: { confId: 4 } },
+ ]},
 };
 
 // ==================== 日志存储 ====================

@@ -4308,6 +4308,7 @@ const CLOUD_TASK_MAP = {
   batchGenieSweep: "genieSweep",
   collection_claimfreereward: "collectionClaim",
   store_purchase: "blackMarketPurchase",
+  batchCampClaimTasks: "campTaskClaim",
   batchLegacyClaim: "legacyHangup",
   batchClaimActivity: "activity",
   batchApexClaimTask: "apexTask",
