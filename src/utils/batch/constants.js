@@ -51,6 +51,7 @@ export const availableTasks = [
   { label: "营地挑战", value: "batchCampChallenge" },
   { label: "营地挑战宠物", value: "batchCampChallengePet" },
   { label: "领取营地任务奖励", value: "batchCampClaimTasks" },
+  { label: "批量申请俱乐部", value: "batchApplyLegion" },
   { label: "一键竞技场战斗3次", value: "batcharenafight" },
   { label: "一键钓鱼补齐", value: "batchTopUpFish" },
   { label: "一键竞技场补齐", value: "batchTopUpArena" },
@@ -164,6 +165,7 @@ export const defaultTaskForm = {
   cronExpression: "",
   selectedTokens: [],
   selectedTasks: [],
+  legionApplyTargetId: null,
   enabled: true,
 };
 

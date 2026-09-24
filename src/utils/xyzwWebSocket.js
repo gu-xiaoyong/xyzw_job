@@ -210,6 +210,7 @@ export function registerDefaultCommands(reg) {
     .register("legion_resetresearch")
 
     .register("legion_getinfobyid")
+    .register("legion_applyjoin", { legionId: 0 })
     .register("legion_getarearank")
     .register("saltroad_getsaltroadwartotalrank")
     .register("legionwar_getgoldmonthwarrank")
@@ -1139,6 +1140,7 @@ export class XyzwWebSocketClient {
       warguess_getguesscoinrewardresp: "warguess_getguesscoinreward",
       league_getbattlefieldresp: "league_getbattlefield",
       league_getgroupopponentresp: "league_getgroupopponent",
+      legion_applyjoinresp: "legion_applyjoin",
       legion_signupresp: "legion_signup",
       legion_payloadsignupresp: "legion_payloadsignup",
       legionmatch_rolesignupresp: "legionmatch_rolesignup",
