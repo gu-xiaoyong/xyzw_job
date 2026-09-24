@@ -383,6 +383,13 @@
                 </n-button>
                 <n-button
                   size="small"
+                  @click="batchCampClaimTasks"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                >
+                  一键营地任务奖励
+                </n-button>
+                <n-button
+                  size="small"
                   @click="batchGenieSweep"
                   :disabled="isRunning || selectedTokens.length === 0"
                 >
