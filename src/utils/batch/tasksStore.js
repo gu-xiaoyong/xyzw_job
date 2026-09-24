@@ -1,7 +1,7 @@
 /**
  * 商店类任务
  * 包含: legion_storebuygoods, legionStoreBuySkinCoins, store_purchase,
- *       collection_claimfreereward, batchClaimActivity
+ *       collection_claimfreereward, batchClaimActivity, batchClaimMail
  */
 
 /**
@@ -554,11 +554,94 @@ export function createTasksStore(deps) {
     message.success("批量领取活跃度任务结束");
   };
 
+  /**
+   * 一键邮件领取
+   */
+  const batchClaimMail = async () => {
+    if (selectedTokens.value.length === 0) return;
+
+    isRunning.value = true;
+    shouldStop.value = false;
+
+    selectedTokens.value.forEach((id) => {
+      tokenStatus.value[id] = "waiting";
+    });
+
+    const taskPromises = selectedTokens.value.map(async (tokenId) => {
+      if (shouldStop.value) return;
+
+      tokenStatus.value[tokenId] = "running";
+
+      const token = tokens.value.find((t) => t.id === tokenId);
+
+      try {
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `=== 开始邮件领取: ${token.name} ===`,
+          type: "info",
+        });
+
+        await ensureConnection(tokenId);
+
+        const result = await tokenStore.sendMessageWithPromise(
+          tokenId,
+          "mail_claimallattachment",
+          {},
+          8000,
+        );
+
+        await new Promise((r) => setTimeout(r, delayConfig.action));
+
+        if (result.error) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 邮件领取失败: ${result.error}`,
+            type: "error",
+          });
+          tokenStatus.value[tokenId] = "failed";
+        } else {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 邮件附件领取成功`,
+            type: "success",
+          });
+          tokenStatus.value[tokenId] = "completed";
+        }
+      } catch (error) {
+        // 200020 = 服务器暂无可领取，属正常情况
+        const nothingToClaim = (error.message || "").includes("200020");
+        tokenStatus.value[tokenId] = nothingToClaim ? "completed" : "failed";
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: nothingToClaim
+            ? `${token.name} 暂无可领取的邮件附件，跳过`
+            : `${token.name} 邮件领取过程出错: ${error.message}`,
+          type: nothingToClaim ? "info" : "error",
+        });
+      } finally {
+        tokenStore.closeWebSocketConnection(tokenId);
+        releaseConnectionSlot();
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+          type: "info",
+        });
+      }
+    });
+
+    await Promise.all(taskPromises);
+
+    isRunning.value = false;
+    currentRunningTokenId.value = null;
+    message.success("批量邮件领取结束");
+  };
+
   return {
     legion_storebuygoods,
     legionStoreBuySkinCoins,
     store_purchase,
     collection_claimfreereward,
     batchClaimActivity,
+    batchClaimMail,
   };
 }

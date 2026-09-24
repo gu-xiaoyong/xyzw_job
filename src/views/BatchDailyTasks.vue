@@ -3575,6 +3575,7 @@ const taskGroupDefinitions = [
       "batchCampClaimTasks",
       "store_purchase",
       "collection_claimfreereward",
+      "batchClaimMail",
       "batchClaimActivity",
       "batchGenieSweep",
       "batchXuanwuBlessing",
@@ -6181,6 +6182,7 @@ const {
   store_purchase,
   collection_claimfreereward,
   batchClaimActivity,
+  batchClaimMail,
 } = tasksStore;
 
 const tasksLegacy = createTasksLegacy(createTaskDeps());
