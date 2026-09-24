@@ -376,6 +376,13 @@
                 </n-button>
                 <n-button
                   size="small"
+                  @click="batchClaimMail"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                >
+                  一键邮件领取
+                </n-button>
+                <n-button
+                  size="small"
                   @click="batchClaimActivity"
                   :disabled="isRunning || selectedTokens.length === 0"
                 >
