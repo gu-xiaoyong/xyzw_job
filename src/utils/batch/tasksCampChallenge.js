@@ -423,9 +423,10 @@ export function createTasksCampChallenge(deps) {
   };
 
   /**
-   * 领取营地挑战任务奖励
+   * 领取营地挑战任务奖励（个人 + 俱乐部共享）
    * 不做本地进度预判(taskProgress/taskClaimedMap 字段语义未经验证, 误判会漏领),
    * 以服务器响应为准: 成功即领取, 已知"无可领"错误码静默跳过。
+   * confId 覆盖 1-12: 1-4 为个人任务(实测), 共享任务为更高 confId 段;
    * 任一轮有成功则继续下一轮, 覆盖"领取后同槽位刷新出新任务"的情况。
    */
   const batchCampClaimTasks = async () => {
@@ -437,6 +438,7 @@ export function createTasksCampChallenge(deps) {
       tokenStatus.value[id] = "waiting";
     });
 
+    const CAMP_TASK_CONF_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
     const NOTHING_TO_CLAIM_CODES = ["200020", "13000160", "13000170"];
     const MAX_ROUNDS = 4;
 
@@ -467,7 +469,7 @@ export function createTasksCampChallenge(deps) {
         while (!shouldStop.value && roundHadSuccess && rounds < MAX_ROUNDS) {
           roundHadSuccess = false;
           rounds++;
-          for (const confId of [1, 2, 3, 4]) {
+          for (const confId of CAMP_TASK_CONF_IDS) {
             if (shouldStop.value) break;
             try {
               await tokenStore.sendMessageWithPromise(
