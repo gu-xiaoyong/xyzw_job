@@ -424,9 +424,9 @@ export function createTasksCampChallenge(deps) {
 
   /**
    * 领取营地挑战任务奖励
-   * 通过 club_getinfo 获取 siege.taskProgress 和 siege.taskClaimedMap
-   * taskProgress: 1/2/3 是3个区域(值为1可领取), 4是挑战3次(值>=3可领取)
-   * taskClaimedMap 中已有的 key 表示已领取
+   * 不做本地进度预判(taskProgress/taskClaimedMap 字段语义未经验证, 误判会漏领),
+   * 以服务器响应为准: 成功即领取, 已知"无可领"错误码静默跳过。
+   * 任一轮有成功则继续下一轮, 覆盖"领取后同槽位刷新出新任务"的情况。
    */
   const batchCampClaimTasks = async () => {
     if (selectedTokens.value.length === 0) return;
@@ -437,10 +437,8 @@ export function createTasksCampChallenge(deps) {
       tokenStatus.value[id] = "waiting";
     });
 
-    // 任务达标所需进度: 1/2/3 区域任务值为1即达标, 4 需要挑战3次
-    const claimThreshold = (confId) => (confId === 4 ? 3 : 1);
-    const readProgress = (taskProgress, confId) =>
-      Number(taskProgress?.[confId] ?? taskProgress?.[String(confId)] ?? 0);
+    const NOTHING_TO_CLAIM_CODES = ["200020", "13000160", "13000170"];
+    const MAX_ROUNDS = 4;
 
     const taskPromises = selectedTokens.value.map(async (tokenId) => {
       if (shouldStop.value) return;
@@ -455,74 +453,57 @@ export function createTasksCampChallenge(deps) {
         await ensureConnection(tokenId);
         if (shouldStop.value) return;
 
-        const res = await tokenStore.sendMessageWithPromise(
+        // 预热营地模块数据(与游戏客户端进入营地页行为一致)
+        await tokenStore.sendMessageWithPromise(
           tokenId,
           "club_getinfo",
           {},
           15000,
         );
 
-        const siege = res?.siege || {};
-        const taskProgress = siege.taskProgress || {};
-        const claimedMap = siege.taskClaimedMap || {};
-
         let claimedCount = 0;
-        let skippedClaimed = 0;
-        let skippedProgress = 0;
-        for (const confId of [1, 2, 3, 4]) {
-          if (shouldStop.value) break;
-
-          if (claimedMap[confId] !== undefined || claimedMap[String(confId)] !== undefined) {
-            skippedClaimed++;
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `${token.name} 任务 ${confId} 奖励已领取过，跳过`,
-              type: "info",
-            });
-            continue;
+        let rounds = 0;
+        let roundHadSuccess = true;
+        while (!shouldStop.value && roundHadSuccess && rounds < MAX_ROUNDS) {
+          roundHadSuccess = false;
+          rounds++;
+          for (const confId of [1, 2, 3, 4]) {
+            if (shouldStop.value) break;
+            try {
+              await tokenStore.sendMessageWithPromise(
+                tokenId,
+                "club_taskclaim",
+                { confId },
+                5000,
+              );
+              claimedCount++;
+              roundHadSuccess = true;
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 成功领取任务 ${confId} 奖励`,
+                type: "success",
+              });
+            } catch (err) {
+              // 200020=暂无可领取/已领取, 13000160/13000170=未达标或未解锁, 均属正常
+              const msg = err.message || "";
+              const nothingToClaim = NOTHING_TO_CLAIM_CODES.some((c) =>
+                msg.includes(c),
+              );
+              if (!nothingToClaim) {
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} 领取任务 ${confId} 失败: ${msg || "未知错误"}`,
+                  type: "error",
+                });
+              }
+            }
+            await new Promise((r) => setTimeout(r, 500));
           }
-
-          const progress = readProgress(taskProgress, confId);
-          if (progress < claimThreshold(confId)) {
-            skippedProgress++;
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `${token.name} 任务 ${confId} 进度未达标(${progress}/${claimThreshold(confId)})，跳过`,
-              type: "info",
-            });
-            continue;
-          }
-
-          try {
-            await tokenStore.sendMessageWithPromise(
-              tokenId,
-              "club_taskclaim",
-              { confId },
-              5000,
-            );
-            claimedCount++;
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `${token.name} 成功领取任务 ${confId} 奖励`,
-              type: "success",
-            });
-          } catch (err) {
-            // 200020 = 服务器暂无可领取（进度数据滞后等），属正常情况
-            const nothingToClaim = (err.message || "").includes("200020");
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: nothingToClaim
-                ? `${token.name} 任务 ${confId} 暂无可领取，跳过`
-                : `${token.name} 领取任务 ${confId} 失败: ${err.message || "未知错误"}`,
-              type: nothingToClaim ? "info" : "error",
-            });
-          }
-          await new Promise((r) => setTimeout(r, 500));
         }
 
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `${token.name} 营地任务奖励领取完成: 成功${claimedCount} 已领${skippedClaimed} 未达标${skippedProgress}`,
+          message: `${token.name} 营地任务奖励领取完成: 成功${claimedCount} (共${rounds}轮)`,
           type: claimedCount > 0 ? "success" : "info",
         });
 
