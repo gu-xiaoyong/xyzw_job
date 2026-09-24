@@ -52,6 +52,19 @@
                   云端定时
                 </n-button>
               </div>
+              <div
+                class="setting-item"
+                style="
+                  flex-direction: row;
+                  justify-content: space-between;
+                  align-items: center;
+                "
+              >
+                <label class="setting-label">黑市采购清单配置</label>
+                <n-button size="small" @click="openBlackMarketPurchaseModal">
+                  点击配置
+                </n-button>
+              </div>
             </div>
           </div>
           <div class="header-action-box">
@@ -339,6 +352,13 @@
                   "
                 >
                   一键竞技场战斗3次
+                </n-button>
+                <n-button
+                  size="small"
+                  @click="store_syncpurchaseconfig"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                >
+                  一键配置黑市清单
                 </n-button>
                 <n-button
                   size="small"
@@ -1633,6 +1653,83 @@
           <n-button type="primary" @click="saveDreamBuyConfig"
             >保存配置</n-button
           >
+        </div>
+      </div>
+    </n-modal>
+
+    <!-- Black Market Purchase Modal -->
+    <n-modal
+      v-model:show="showBlackMarketPurchaseModal"
+      preset="card"
+      title="黑市采购清单配置"
+      style="width: 90%; max-width: 760px"
+    >
+      <div class="settings-content">
+        <n-alert type="info" show-icon style="margin-bottom: 12px">
+          这里保存的是要下发到游戏服务器的黑市采购清单。每条填写 `itemId`
+          和折扣，折扣范围 1-10；保存后需手动执行“一键配置黑市清单”才会真正写入服务器。
+        </n-alert>
+
+        <div style="display: flex; gap: 12px; margin-bottom: 12px">
+          <n-button size="small" type="primary" @click="addBlackMarketPurchaseItem">
+            新增条目
+          </n-button>
+          <n-button size="small" @click="resetBlackMarketPurchaseList">
+            恢复默认
+          </n-button>
+        </div>
+
+        <n-alert type="warning" show-icon style="margin-bottom: 12px">
+          优先从下拉框选择常用物品，系统会自动填入 `itemId`、备注和推荐折扣；如果下拉里没有，再手动填写 `itemId`。
+        </n-alert>
+
+        <div
+          v-for="(item, index) in blackMarketPurchaseList"
+          :key="`${index}-${item.itemId ?? 'new'}`"
+          style="
+            display: grid;
+            grid-template-columns: 220px 120px 120px 1fr 96px;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 12px;
+          "
+        >
+          <n-select
+            :value="item.itemId"
+            :options="blackMarketItemOptions"
+            placeholder="选择常用物品"
+            clearable
+            filterable
+            @update:value="(value) => applyBlackMarketCatalogItem(index, value)"
+          />
+          <n-input-number
+            v-model:value="item.itemId"
+            placeholder="itemId"
+            :min="1"
+            :show-button="false"
+          />
+          <n-input-number
+            v-model:value="item.discount"
+            placeholder="折扣"
+            :min="1"
+            :max="10"
+          />
+          <n-input v-model:value="item.note" placeholder="备注（可选）" />
+          <n-button type="error" secondary @click="removeBlackMarketPurchaseItem(index)">
+            删除
+          </n-button>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 20px; text-align: right">
+          <n-button
+            @click="showBlackMarketPurchaseModal = false"
+            style="margin-right: 12px"
+          >
+            取消
+          </n-button>
+          <n-button type="primary" @click="saveBlackMarketPurchaseConfig">
+            保存配置
+          </n-button>
         </div>
       </div>
     </n-modal>
@@ -3118,6 +3215,12 @@ import {
   createTasksCampChallenge,
   createTasksXuanwuBlessing,
 } from "@/utils/batch";
+import {
+  blackMarketItemCatalog,
+  createBlackMarketPurchaseEntry,
+  defaultBlackMarketPurchaseList,
+  normalizeBlackMarketPurchaseList,
+} from "@/utils/batch/blackMarketConfig";
 
 import { merchantConfig, goldItemsConfig } from "@/utils/dreamConstants";
 
@@ -3680,8 +3783,17 @@ for (const merchantId in goldItemsConfig) {
   });
 }
 
+const createDefaultBlackMarketPurchaseList = () =>
+  defaultBlackMarketPurchaseList.map((item) => ({ ...item }));
+
+const blackMarketItemOptions = blackMarketItemCatalog.map((item) => ({
+  label: `${item.label} (${item.itemId})`,
+  value: item.itemId,
+}));
+
 const batchSettings = reactive({
   dreamPurchaseList: defaultDreamPurchaseList,
+  blackMarketPurchaseList: createDefaultBlackMarketPurchaseList(),
   boxCount: 100,
   fishCount: 100,
   recruitCount: 100,
@@ -3720,6 +3832,11 @@ const loadBatchSettings = () => {
     }
     batchSettings.cdkCodes = batchSettings.cdkCodes || "";
     batchSettings.cdkPlatformType = batchSettings.cdkPlatformType || "h5";
+    batchSettings.blackMarketPurchaseList = normalizeBlackMarketPurchaseList(
+      batchSettings.blackMarketPurchaseList?.length
+        ? batchSettings.blackMarketPurchaseList
+        : createDefaultBlackMarketPurchaseList(),
+    );
   } catch (error) {
     console.error("Failed to load batch settings:", error);
   }
@@ -3801,6 +3918,7 @@ const taskGroupDefinitions = [
       "batchCampChallenge",
       "batchCampChallengePet",
       "batchCampClaimTasks",
+      "store_syncpurchaseconfig",
       "store_purchase",
       "collection_claimfreereward",
       "batchClaimMail",
@@ -4497,6 +4615,7 @@ const exportConfig = async () => {
         recruitCount: batchSettings.recruitCount,
         defaultBoxType: batchSettings.defaultBoxType,
         defaultFishType: batchSettings.defaultFishType,
+        blackMarketPurchaseList: batchSettings.blackMarketPurchaseList,
         commandDelay: batchSettings.commandDelay,
         taskDelay: batchSettings.taskDelay,
         actionDelay: batchSettings.actionDelay,
@@ -4690,6 +4809,12 @@ const importConfig = async ({ file }) => {
         // Import batch settings if provided
         if (importData.batchSettings) {
           Object.assign(batchSettings, importData.batchSettings);
+          batchSettings.blackMarketPurchaseList =
+            normalizeBlackMarketPurchaseList(
+              batchSettings.blackMarketPurchaseList?.length
+                ? batchSettings.blackMarketPurchaseList
+                : createDefaultBlackMarketPurchaseList(),
+            );
           saveBatchSettings();
         }
 
@@ -5568,6 +5693,56 @@ const executeRedeemCodes = async () => {
 const showDreamBuyModal = ref(false);
 const dreamBuyList = ref([]);
 
+// Black Market Purchase Modal Logic
+const showBlackMarketPurchaseModal = ref(false);
+const blackMarketPurchaseList = ref(createDefaultBlackMarketPurchaseList());
+
+const openBlackMarketPurchaseModal = () => {
+  blackMarketPurchaseList.value = normalizeBlackMarketPurchaseList(
+    batchSettings.blackMarketPurchaseList?.length
+      ? batchSettings.blackMarketPurchaseList
+      : createDefaultBlackMarketPurchaseList(),
+  ).map((item) => ({ ...item }));
+
+  showBlackMarketPurchaseModal.value = true;
+};
+
+const addBlackMarketPurchaseItem = () => {
+  blackMarketPurchaseList.value.push(createBlackMarketPurchaseEntry());
+};
+
+const applyBlackMarketCatalogItem = (index, itemId) => {
+  blackMarketPurchaseList.value[index] = {
+    ...blackMarketPurchaseList.value[index],
+    ...createBlackMarketPurchaseEntry(itemId),
+  };
+};
+
+const removeBlackMarketPurchaseItem = (index) => {
+  blackMarketPurchaseList.value.splice(index, 1);
+};
+
+const resetBlackMarketPurchaseList = () => {
+  blackMarketPurchaseList.value = createDefaultBlackMarketPurchaseList();
+};
+
+const saveBlackMarketPurchaseConfig = () => {
+  const normalized = normalizeBlackMarketPurchaseList(
+    blackMarketPurchaseList.value,
+  );
+
+  if (normalized.length === 0) {
+    message.error("请至少配置一项黑市采购条目");
+    return;
+  }
+
+  batchSettings.blackMarketPurchaseList = normalized;
+  saveBatchSettings();
+
+  showBlackMarketPurchaseModal.value = false;
+  message.success("黑市采购清单已保存");
+};
+
 const openDreamBuyModal = () => {
   // Load saved settings
   dreamBuyList.value = batchSettings.dreamPurchaseList || [];
@@ -6444,6 +6619,7 @@ const tasksStore = createTasksStore(createTaskDeps());
 const {
   legion_storebuygoods,
   legionStoreBuySkinCoins,
+  store_syncpurchaseconfig,
   store_purchase,
   collection_claimfreereward,
   batchClaimActivity,
