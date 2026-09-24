@@ -156,7 +156,6 @@
     </div>
 
     <ClubInfo v-if="activeSection === 'club'" />
-    <ClubCarKing v-if="activeSection === 'club'" />
 
     <!-- 月度任务进度（提取组件） -->
     <MonthlyTasksCard v-show="activeSection === 'activity'" />

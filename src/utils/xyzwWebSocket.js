@@ -160,6 +160,7 @@ export function registerDefaultCommands(reg) {
     .register("system_signinreward")
     .register("system_mysharecallback", { isSkipShareCard: true, type: 2 })
     .register("system_custom", { key: "", value: 0 })
+    .register("system_claimcdkreward", { key: "", platformType: "h5" })
 
     // 任务相关
     .register("task_claimdailypoint", { taskId: 1 })
@@ -356,7 +357,6 @@ export function registerDefaultCommands(reg) {
 
     // 扭蛋相关
     .register("gacha_drawreward", { num: 1, isGroup: false })
-
 
     // 功法
     .register("legacy_getinfo")
@@ -1212,6 +1212,7 @@ export class XyzwWebSocketClient {
         "genie_sweep",
         "genie_buysweep",
         "system_signinreward",
+        "system_claimcdkreward",
         "dungeon_selecthero",
         "artifact_exchange",
         "hero_exchange",

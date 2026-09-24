@@ -2266,6 +2266,9 @@ onUnmounted(() => {
   gap: 8px;
   max-width: 100%;
   flex-wrap: wrap;
+  flex: 0 0 auto;
+  overflow: visible;
+  justify-content: flex-end;
 }
 
 .multi-game-selection-count {

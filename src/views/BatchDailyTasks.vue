@@ -573,6 +573,13 @@
                 </n-button>
                 <n-button
                   size="small"
+                  @click="openRedeemCodeModal"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                >
+                  一键使用兑换码
+                </n-button>
+                <n-button
+                  size="small"
                   @click="batchHeroUpgrade"
                   :disabled="isRunning || selectedTokens.length === 0"
                 >
@@ -1512,6 +1519,56 @@
             >取消</n-button
           >
           <n-button type="primary" @click="executeHelper">开始执行</n-button>
+        </div>
+      </div>
+    </n-modal>
+
+    <!-- Redeem Code Modal -->
+    <n-modal
+      v-model:show="showRedeemCodeModal"
+      preset="card"
+      title="一键使用兑换码"
+      style="width: 90%; max-width: 560px"
+    >
+      <div class="settings-content">
+        <n-alert type="info" show-icon style="margin-bottom: 12px">
+          每行填写一个兑换码，也支持用空格、逗号或分号分隔。执行时会先读取角色已兑换记录，已使用的兑换码会自动跳过。
+        </n-alert>
+        <div class="settings-grid">
+          <div class="setting-item">
+            <label class="setting-label">兑换码列表</label>
+            <n-input
+              v-model:value="batchSettings.cdkCodes"
+              type="textarea"
+              placeholder="例如：&#10;vip666&#10;VIP666&#10;happy666"
+              :autosize="{ minRows: 7, maxRows: 14 }"
+            />
+          </div>
+          <div class="setting-item">
+            <label class="setting-label">平台类型</label>
+            <n-input
+              v-model:value="batchSettings.cdkPlatformType"
+              placeholder="默认 h5"
+            />
+          </div>
+        </div>
+        <div class="modal-actions" style="margin-top: 20px; text-align: right">
+          <n-button
+            @click="showRedeemCodeModal = false"
+            style="margin-right: 12px"
+          >
+            取消
+          </n-button>
+          <n-button @click="saveRedeemCodeConfig" style="margin-right: 12px">
+            保存配置
+          </n-button>
+          <n-button
+            type="primary"
+            @click="executeRedeemCodes"
+            :disabled="!batchSettings.cdkCodes?.trim()"
+          >
+            开始兑换
+          </n-button>
         </div>
       </div>
     </n-modal>
@@ -3402,6 +3459,8 @@ const batchSettings = reactive({
   boxCount: 100,
   fishCount: 100,
   recruitCount: 100,
+  cdkCodes: "",
+  cdkPlatformType: "h5",
   defaultBoxType: 2001,
   defaultFishType: 1,
   targetBoxPoints: 1000,
@@ -3412,7 +3471,7 @@ const batchSettings = reactive({
   commandDelay: 500, // 命令间延迟
   taskDelay: 500, // 任务间延迟
   actionDelay: 300, // 一般操作延迟（开箱、钓鱼、招募等）
-  battleDelay: 500, // 战斗延迟（竞技场等）
+  battleDelay: 500, // 战斗延迟（宝库、竞技场等）
   refreshDelay: 1000, // 刷新延迟
   longDelay: 3000, // 长延迟（功法赠送等）
   // 其他配置
@@ -3433,6 +3492,8 @@ const loadBatchSettings = () => {
       const parsed = JSON.parse(saved);
       Object.assign(batchSettings, parsed);
     }
+    batchSettings.cdkCodes = batchSettings.cdkCodes || "";
+    batchSettings.cdkPlatformType = batchSettings.cdkPlatformType || "h5";
   } catch (error) {
     console.error("Failed to load batch settings:", error);
   }
@@ -3483,6 +3544,7 @@ const avatarLoadError = ref(false);
 const scheduledTasks = ref([]); // List of all scheduled tasks
 const showTaskModal = ref(false); // Control the visibility of the add/edit task modal
 const showTasksModal = ref(false); // Control the visibility of the tasks list modal
+const showRedeemCodeModal = ref(false); // Control the visibility of the redeem code modal
 const editingTask = ref(null); // Currently editing task
 const taskForm = reactive({
   name: "", // Task name
@@ -3558,6 +3620,7 @@ const taskGroupDefinitions = [
       "batchClaimBoxPointReward",
       "batchFish",
       "batchRecruit",
+      "batchRedeemCodes",
       "legion_storebuygoods",
     ],
   },
@@ -5212,6 +5275,31 @@ const executeHelper = () => {
   }
 };
 
+const openRedeemCodeModal = () => {
+  loadBatchSettings();
+  batchSettings.cdkCodes = batchSettings.cdkCodes || "";
+  batchSettings.cdkPlatformType = batchSettings.cdkPlatformType || "h5";
+  showRedeemCodeModal.value = true;
+};
+
+const saveRedeemCodeConfig = () => {
+  batchSettings.cdkCodes = batchSettings.cdkCodes || "";
+  batchSettings.cdkPlatformType = batchSettings.cdkPlatformType || "h5";
+  localStorage.setItem("batchSettings", JSON.stringify(batchSettings));
+  message.success("兑换码配置已保存");
+};
+
+const executeRedeemCodes = async () => {
+  if (!batchSettings.cdkCodes?.trim()) {
+    message.error("请先填写兑换码");
+    return;
+  }
+
+  saveRedeemCodeConfig();
+  showRedeemCodeModal.value = false;
+  await batchRedeemCodes();
+};
+
 // Dream Buy Modal Logic
 const showDreamBuyModal = ref(false);
 const dreamBuyList = ref([]);
@@ -6072,6 +6160,7 @@ const {
   batchClaimBoxPointReward,
   batchFish,
   batchRecruit,
+  batchRedeemCodes,
   batchHeroUpgrade,
   batchBookUpgrade,
   batchClaimStarRewards,
@@ -6109,7 +6198,6 @@ const { batchCampChallenge, batchCampChallengePet, batchCampClaimTasks } = tasks
 
 const tasksXuanwuBlessing = createTasksXuanwuBlessing(createTaskDeps());
 const { batchXuanwuBlessing } = tasksXuanwuBlessing;
-
 
 // 营地挑战模式选择
 const campChallengeMode = ref("pet");
