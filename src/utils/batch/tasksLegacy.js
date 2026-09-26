@@ -30,6 +30,50 @@ export function createTasksLegacy(deps) {
     delayConfig,
   } = deps;
 
+  // 新赛季探索「开始」按钮的候选命令(仓库内无该模块协议, 按盐罐 bottlehelper_start/claim 命名规律推测)。
+  // 依次尝试, 服务器接受其一即可; 全部失败时提示抓包确认真实命令。
+  const EXPLORE_START_CANDIDATES = [
+    "legacy_starthangup",
+    "legacy_startexplore",
+    "legacy_explore",
+  ];
+
+  /**
+   * 尝试开始功法探索(等价于游戏内点「开始」)
+   * @returns {boolean} 是否确认已开始(或已在探索中)
+   */
+  const tryStartExplore = async (tokenId, tokenName) => {
+    for (const cmd of EXPLORE_START_CANDIDATES) {
+      try {
+        await tokenStore.sendMessageWithPromise(tokenId, cmd, {}, 4000);
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${token.name} 已发送开始探索指令(${cmd})，探索周期开始产出残卷`,
+          type: "success",
+        });
+        return true;
+      } catch (err) {
+        const msg = err.message || "";
+        // 200020 = 已在探索中/无可开始, 视为已开始
+        if (msg.includes("200020")) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 探索已在进行中`,
+            type: "info",
+          });
+          return true;
+        }
+        // 命令不存在(响应超时)或其它错误 → 尝试下一个候选
+      }
+    }
+    addLog({
+      time: new Date().toLocaleTimeString(),
+      message: `${token.name} 未能确认开始探索(候选命令均未被接受)，请在游戏内抓包「开始」按钮的发送指令后反馈`,
+      type: "warning",
+    });
+    return false;
+  };
+
   /**
    * 批量领取功法残卷
    */
@@ -55,53 +99,12 @@ export function createTasksLegacy(deps) {
         });
         await ensureConnection(tokenId);
 
-        // 新赛季后功法挂机需重新打开: 开关开启时先读取功法信息尝试触发赛季挂机状态
-        // (对齐游戏内打开功法页的行为, 纯读取无副作用), 读取失败不阻断领取
-        if (batchSettings.legacyAutoOpen) {
-          try {
-            await tokenStore.sendMessageWithPromise(
-              tokenId,
-              "legacy_getinfo",
-              {},
-              8000,
-            );
-            await new Promise((r) => setTimeout(r, 500));
-          } catch {
-            // 忽略, 继续直接领取
-          }
-        }
-
-        let LegacyClaimHangUpResp;
-        try {
-          LegacyClaimHangUpResp = await tokenStore.sendMessageWithPromise(
-            tokenId,
-            "legacy_claimhangup",
-            {},
-            5000,
-          );
-        } catch (claimErr) {
-          const firstCodeMatch = /服务器错误: (\d+)/.exec(claimErr.message || "");
-          const firstErrorCode =
-            claimErr?.code ?? (firstCodeMatch ? Number(firstCodeMatch[1]) : null);
-          // 200020 = 暂无可领取, 无需补领; 开关关闭时也不补领
-          if (!batchSettings.legacyAutoOpen || firstErrorCode === 200020) {
-            throw claimErr;
-          }
-          // 开关开启: 再读一次功法信息后补领一次(覆盖赛季状态懒加载)
-          await tokenStore.sendMessageWithPromise(
-            tokenId,
-            "legacy_getinfo",
-            {},
-            8000,
-          ).catch(() => {});
-          await new Promise((r) => setTimeout(r, 800));
-          LegacyClaimHangUpResp = await tokenStore.sendMessageWithPromise(
-            tokenId,
-            "legacy_claimhangup",
-            {},
-            5000,
-          );
-        }
+        const LegacyClaimHangUpResp = await tokenStore.sendMessageWithPromise(
+          tokenId,
+          "legacy_claimhangup",
+          {},
+          5000,
+        );
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `=== ${token.name} 成功领取功法残卷${LegacyClaimHangUpResp.reward[0].value}，共有${LegacyClaimHangUpResp.role.items[37007].quantity}个`,
@@ -115,11 +118,23 @@ export function createTasksLegacy(deps) {
         const errorCode = error?.code ?? (codeMatch ? Number(codeMatch[1]) : null);
         if (errorCode === 200020) {
           tokenStatus.value[tokenId] = "completed";
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${token.name} 暂无可领取的功法残卷`,
-            type: "info",
-          });
+          // 新赛季探索未开始时挂机无积累: 开关开启则尝试批量"开始探索"
+          if (batchSettings.legacyAutoOpen) {
+            const started = await tryStartExplore(tokenId, token.name);
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: started
+                ? `${token.name} 暂无可领取，已尝试开始探索，产出后再次运行即可领取`
+                : `${token.name} 暂无可领取的功法残卷`,
+              type: "info",
+            });
+          } else {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 暂无可领取的功法残卷`,
+              type: "info",
+            });
+          }
         } else {
           // 小号（等级<4001）功法未解锁，领取失败属正常情况，不打印错误日志
           let isAltAccount = false;

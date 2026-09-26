@@ -677,7 +677,7 @@
                   size="small"
                   @update:value="persistLegacySwitch"
                 >
-                  <template #default>新赛季开启挂机</template>
+                  <template #default>新赛季开始探索</template>
                 </n-switch>
               </n-space>
             </n-tab-pane>
