@@ -118,23 +118,12 @@ export function createTasksLegacy(deps) {
         const errorCode = error?.code ?? (codeMatch ? Number(codeMatch[1]) : null);
         if (errorCode === 200020) {
           tokenStatus.value[tokenId] = "completed";
-          // 新赛季探索未开始时挂机无积累: 开关开启则尝试批量"开始探索"
-          if (batchSettings.legacyAutoOpen) {
-            const started = await tryStartExplore(tokenId, token.name);
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: started
-                ? `${token.name} 暂无可领取，已尝试开始探索，产出后再次运行即可领取`
-                : `${token.name} 暂无可领取的功法残卷`,
-              type: "info",
-            });
-          } else {
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `${token.name} 暂无可领取的功法残卷`,
-              type: "info",
-            });
-          }
+          // 挂机无积累: 多半是新赛季探索未开始, 用「批量功法残卷开启」按钮批量开启
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 暂无可领取的功法残卷（若为新赛季请先用「批量功法残卷开启」开始探索）`,
+            type: "info",
+          });
         } else {
           // 小号（等级<4001）功法未解锁，领取失败属正常情况，不打印错误日志
           let isAltAccount = false;
@@ -179,6 +168,66 @@ export function createTasksLegacy(deps) {
     isRunning.value = false;
     currentRunningTokenId.value = null;
     message.success("批量领取功法残卷结束");
+  };
+
+  /**
+   * 批量开始功法探索（新赛季「开始」按钮的批量版）
+   */
+  const batchLegacyStartExplore = async () => {
+    if (selectedTokens.value.length === 0) return;
+    isRunning.value = true;
+    shouldStop.value = false;
+
+    selectedTokens.value.forEach((id) => {
+      tokenStatus.value[id] = "waiting";
+    });
+
+    const taskPromises = selectedTokens.value.map(async (tokenId) => {
+      if (shouldStop.value) return;
+      tokenStatus.value[tokenId] = "running";
+
+      const token = tokens.value.find((t) => t.id === tokenId);
+      try {
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `=== 开始功法探索: ${token.name} ===`,
+          type: "info",
+        });
+        await ensureConnection(tokenId);
+
+        const started = await tryStartExplore(tokenId, token.name);
+        tokenStatus.value[tokenId] = "completed";
+        if (!started) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 开始探索未确认，请抓包「开始」按钮的发送指令后反馈`,
+            type: "warning",
+          });
+        }
+      } catch (error) {
+        console.error(error);
+        tokenStatus.value[tokenId] = "failed";
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${token.name} 开始功法探索失败: ${error.message || "未知错误"}`,
+          type: "error",
+        });
+      } finally {
+        tokenStore.closeWebSocketConnection(tokenId);
+        releaseConnectionSlot();
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+          type: "info",
+        });
+      }
+    });
+
+    await Promise.all(taskPromises);
+
+    isRunning.value = false;
+    currentRunningTokenId.value = null;
+    message.success("批量开始功法探索结束");
   };
 
   /**
@@ -430,6 +479,7 @@ export function createTasksLegacy(deps) {
 
   return {
     batchLegacyClaim,
+    batchLegacyStartExplore,
     batchLegacyGiftSendEnhanced,
   };
 }
