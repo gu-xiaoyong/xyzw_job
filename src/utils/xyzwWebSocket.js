@@ -358,13 +358,11 @@ export function registerDefaultCommands(reg) {
     .register("warguess_getguesscoinreward")
     .register("legion_payloadsignup") // 蟠桃报名
 
-    // 比赛房间(竞技大厅对战房间, 抓包确认的读取命令 + 预约命令候选)
+    // 比赛房间(竞技大厅对战房间, 抓包确认的读取命令 + 预约命令)
     .register("pkroom_getinfo")
     .register("pkroom_getfightroominfo")
     .register("pkroom_getfightroomdetail")
     .register("pkroom_appoint")
-    .register("pkroom_appointroom")
-    .register("pkroom_appointmatch")
 
     // 珍宝阁相关
     .register("collection_claimfreereward")
@@ -1204,8 +1202,6 @@ export class XyzwWebSocketClient {
       pkroom_getfightroominforesp: "pkroom_getfightroominfo",
       pkroom_getfightroomdetailresp: "pkroom_getfightroomdetail",
       pkroom_appointresp: "pkroom_appoint",
-      pkroom_appointroomresp: "pkroom_appointroom",
-      pkroom_appointmatchresp: "pkroom_appointmatch",
       legacy_sendgiftresp: "legacy_sendgift",
       legacy_getgiftsresp: "legacy_getgifts",
       // 盐杯竞猜响应映射

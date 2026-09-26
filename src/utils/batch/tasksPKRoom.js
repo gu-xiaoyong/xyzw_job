@@ -26,14 +26,9 @@ export function createTasksPKRoom(deps) {
     delayConfig,
   } = deps;
 
-  // 预约比赛命令候选: 服务器把预约叫 appoint(状态键 pk:appoint:room:id),
-  // 按 PKRoom 命名规律推测。命令不存在只会超时, 无副作用;
-  // 预约成功的回包是按 resp 路由的 SyncResp, 超时的候选再用角色数据校验。
-  const PK_BOOK_CMD_CANDIDATES = [
-    "pkroom_appoint",
-    "pkroom_appointroom",
-    "pkroom_appointmatch",
-  ];
+  // 预约比赛命令(实测确认: pkroom_appoint, 回包为按 resp 路由的 SyncResp,
+  // body.role.statistics 携带 pk:appoint:room:id = 预约的房间ID)
+  const PK_BOOK_CMD_CANDIDATES = ["pkroom_appoint"];
 
   /**
    * 读取当前账号的预约状态
