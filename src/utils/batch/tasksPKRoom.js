@@ -26,8 +26,8 @@ export function createTasksPKRoom(deps) {
     delayConfig,
   } = deps;
 
-  // 预约比赛命令候选(按 PKRoom 命名规律推测; 若全部未被服务器接受,
-  // 请抓包爱心点击的「发送」指令后替换)。命令不存在只会超时, 无副作用。
+  // 预约比赛命令候选(按 PKRoom 命名规律推测)。命令不存在只会超时, 无副作用;
+  // 预约成功的响应是不可路由的推送(无 cmd/resp), 因此以角色数据校验为准。
   const PK_BOOK_CMD_CANDIDATES = [
     "pkroom_bookfight",
     "pkroom_bookfightroom",
@@ -35,10 +35,41 @@ export function createTasksPKRoom(deps) {
   ];
 
   /**
+   * 读取当前账号的预约状态
+   * 预约成功后 role.statistics 会出现 "pk:appoint:room:id" = 预约的房间ID(抓包确认)
+   * @returns {number} 已预约的房间ID; 0=未预约; -1=读取失败
+   */
+  const readBookedRoomId = async (tokenId) => {
+    try {
+      const roleInfo = await tokenStore.sendMessageWithPromise(
+        tokenId,
+        "role_getroleinfo",
+        {},
+        8000,
+      );
+      const v = roleInfo?.role?.statistics?.["pk:appoint:room:id"];
+      return v ? Number(v) : 0;
+    } catch {
+      return -1;
+    }
+  };
+
+  /**
    * 尝试为当前账号预约比赛
-   * @returns {boolean} 是否预约成功(或已预约过/无可预约)
+   * @returns {boolean} 是否预约成功(或已预约过)
    */
   const tryBookMatch = async (tokenId, tokenName) => {
+    // 已预约则直接跳过, 避免重复发送
+    const preBooked = await readBookedRoomId(tokenId);
+    if (preBooked > 0) {
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `${tokenName} 已预约过比赛(房间${preBooked})，跳过`,
+        type: "info",
+      });
+      return true;
+    }
+
     for (const cmd of PK_BOOK_CMD_CANDIDATES) {
       try {
         await tokenStore.sendMessageWithPromise(tokenId, cmd, {}, 4000);
@@ -50,8 +81,12 @@ export function createTasksPKRoom(deps) {
         return true;
       } catch (err) {
         const msg = err.message || "";
-        // 11900050 = 预约成功(服务器以错误码携带感谢提示)
-        if (err.code === 11900050 || msg.includes("11900050") || msg.includes("感谢您预约")) {
+        // 11900050 = 预约成功(服务器以错误码携带感谢提示, 且该响应可路由时)
+        if (
+          err.code === 11900050 ||
+          msg.includes("11900050") ||
+          msg.includes("感谢您预约")
+        ) {
           addLog({
             time: new Date().toLocaleTimeString(),
             message: `${tokenName} 预约比赛成功：感谢您预约本场比赛，开赛后可领取奖励`,
@@ -68,7 +103,17 @@ export function createTasksPKRoom(deps) {
           });
           return true;
         }
-        // 命令不存在(响应超时)或其它错误 → 尝试下一个候选
+        // 超时/未知错误: 预约成功的响应可能是不可路由的推送, 用角色数据校验
+        const booked = await readBookedRoomId(tokenId);
+        if (booked > 0) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${tokenName} 预约比赛成功(${cmd}，经角色数据确认)，开赛后可领取奖励`,
+            type: "success",
+          });
+          return true;
+        }
+        // 未确认 → 尝试下一个候选
       }
     }
     addLog({
