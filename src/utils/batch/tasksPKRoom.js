@@ -72,10 +72,22 @@ export function createTasksPKRoom(deps) {
 
     for (const cmd of PK_BOOK_CMD_CANDIDATES) {
       try {
-        await tokenStore.sendMessageWithPromise(tokenId, cmd, {}, 4000);
+        // 预约请求的回包是 SyncResp(按 resp 字段路由, 不看 cmd 名),
+        // body.role.statistics 里携带 pk:appoint:room:id = 预约的房间ID
+        const syncBody = await tokenStore.sendMessageWithPromise(
+          tokenId,
+          cmd,
+          {},
+          4000,
+        );
+        const bookedRoomId = Number(
+          syncBody?.role?.statistics?.["pk:appoint:room:id"] || 0,
+        );
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `${tokenName} 预约比赛成功(${cmd})，开赛后可领取奖励`,
+          message: bookedRoomId > 0
+            ? `${tokenName} 预约比赛成功(${cmd}，房间${bookedRoomId})，开赛后可领取奖励`
+            : `${tokenName} 预约比赛成功(${cmd})，开赛后可领取奖励`,
           type: "success",
         });
         return true;
