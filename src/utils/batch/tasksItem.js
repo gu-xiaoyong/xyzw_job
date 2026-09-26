@@ -230,34 +230,29 @@ export function createTasksItem(deps) {
         for (const heroId of heroIds) {
           if (shouldStop.value) break;
 
-          // 每个英雄尝试最多10次升星（只要成功就继续，失败则跳过该英雄）
+          // 每个英雄尝试最多10次升星(resolve即成功继续; reject说明碎片不足/满星/未拥有, 跳过该英雄)
           for (let i = 1; i <= 10; i++) {
             if (shouldStop.value) break;
 
             try {
-              const res = await tokenStore.sendMessageWithPromise(
+              await tokenStore.sendMessageWithPromise(
                 tokenId,
                 "hero_heroupgradestar",
                 { heroId },
-                5000,
+                8000,
               );
-              const ok =
-                res &&
-                (res.code === 0 || res.success === true || res.result === 0);
-
-              if (ok) {
-                addLog({
-                  time: new Date().toLocaleTimeString(),
-                  message: `${token.name} 英雄ID:${heroId} 升星成功 (第${i}次)`,
-                  type: "success",
-                });
-                // 成功了继续尝试下一级，直到失败或达到10次
-              } else {
-                // 失败说明无法继续升星（碎片不足或满星），跳出循环处理下一个英雄
-                throw new Error("升星失败");
-              }
+              // 客户端对错误码统一 reject, resolve 即成功
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 英雄ID:${heroId}(${HERO_DICT[heroId]?.name || heroId}) 升星成功 (第${i}次)`,
+                type: "success",
+              });
             } catch (err) {
-              // 失败则停止当前英雄的升星尝试
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 英雄ID:${heroId}(${HERO_DICT[heroId]?.name || heroId}) 停止升星: ${err.message || "未知错误"}`,
+                type: "info",
+              });
               break;
             }
             await new Promise((r) => setTimeout(r, delayConfig.action));
@@ -321,34 +316,29 @@ export function createTasksItem(deps) {
         for (const heroId of heroIds) {
           if (shouldStop.value) break;
 
-          // 每个英雄尝试最多10次图鉴升星（只要成功就继续，失败则跳过该英雄）
+          // 每个英雄尝试最多10次图鉴升星(resolve即成功继续; reject说明碎片不足/满星, 跳过该英雄)
           for (let i = 1; i <= 10; i++) {
             if (shouldStop.value) break;
 
             try {
-              const res = await tokenStore.sendMessageWithPromise(
+              await tokenStore.sendMessageWithPromise(
                 tokenId,
                 "book_upgrade",
                 { heroId },
-                5000,
+                8000,
               );
-              const ok =
-                res &&
-                (res.code === 0 || res.success === true || res.result === 0);
-
-              if (ok) {
-                addLog({
-                  time: new Date().toLocaleTimeString(),
-                  message: `${token.name} 英雄ID:${heroId} 图鉴升星成功 (第${i}次)`,
-                  type: "success",
-                });
-                // 成功了继续尝试下一级，直到失败或达到10次
-              } else {
-                // 失败说明无法继续图鉴升星（碎片不足或满星），跳出循环处理下一个英雄
-                throw new Error("图鉴升星失败");
-              }
+              // 客户端对错误码统一 reject, resolve 即成功
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 英雄ID:${heroId}(${HERO_DICT[heroId]?.name || heroId}) 图鉴升星成功 (第${i}次)`,
+                type: "success",
+              });
             } catch (err) {
-              // 失败则停止当前英雄的图鉴升星尝试
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 英雄ID:${heroId}(${HERO_DICT[heroId]?.name || heroId}) 停止图鉴升星: ${err.message || "未知错误"}`,
+                type: "info",
+              });
               break;
             }
             await new Promise((r) => setTimeout(r, delayConfig.action));
