@@ -368,10 +368,8 @@ export function registerDefaultCommands(reg) {
     // 功法
     .register("legacy_getinfo")
     .register("legacy_claimhangup")
-    // 探索开始候选命令(新赛季开始探索, 仓库内无该模块协议)
-    .register("legacy_starthangup")
-    .register("legacy_startexplore")
-    .register("legacy_explore")
+    // 新赛季开始探索(游戏内「开始」按钮, 抓包确认)
+    .register("legacy_beginhangup")
     // 功法残卷赠送
     .register("legacy_gift_getlist")
     .register("legacy_gift_send", { recipientId: 0, itemId: 0, quantity: 0 })
@@ -1193,9 +1191,7 @@ export class XyzwWebSocketClient {
       // 功法相关响应映射
       legacy_getinforesp: "legacy_getinfo",
       legacy_claimhangupresp: "legacy_claimhangup",
-      legacy_starthangupresp: "legacy_starthangup",
-      legacy_startexploreresp: "legacy_startexplore",
-      legacy_exploreresp: "legacy_explore",
+      legacy_beginhangupresp: "legacy_beginhangup",
       legacy_sendgiftresp: "legacy_sendgift",
       legacy_getgiftsresp: "legacy_getgifts",
       // 盐杯竞猜响应映射

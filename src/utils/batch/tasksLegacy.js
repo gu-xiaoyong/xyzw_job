@@ -30,48 +30,65 @@ export function createTasksLegacy(deps) {
     delayConfig,
   } = deps;
 
-  // 新赛季探索「开始」按钮的候选命令(仓库内无该模块协议, 按盐罐 bottlehelper_start/claim 命名规律推测)。
-  // 依次尝试, 服务器接受其一即可; 全部失败时提示抓包确认真实命令。
-  const EXPLORE_START_CANDIDATES = [
-    "legacy_starthangup",
-    "legacy_startexplore",
-    "legacy_explore",
-  ];
+  // 新赛季探索「开始」按钮的真实命令(用户抓包确认: Legacy_BeginHangUpResp)
+  const EXPLORE_START_CMD = "legacy_beginhangup";
 
   /**
    * 尝试开始功法探索(等价于游戏内点「开始」)
+   * 先读 hangUpBeginTime 判断是否已在探索中, 已开始则不重复发送(避免重置探索周期)
    * @returns {boolean} 是否确认已开始(或已在探索中)
    */
   const tryStartExplore = async (tokenId, tokenName) => {
-    for (const cmd of EXPLORE_START_CANDIDATES) {
-      try {
-        await tokenStore.sendMessageWithPromise(tokenId, cmd, {}, 4000);
+    try {
+      const info = await tokenStore.sendMessageWithPromise(
+        tokenId,
+        "legacy_getinfo",
+        {},
+        10000,
+      );
+      const beginTime = Number(info?.roleLegacy?.hangUpBeginTime || 0);
+      if (beginTime > 0) {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `${tokenName} 已发送开始探索指令(${cmd})，探索周期开始产出残卷`,
-          type: "success",
+          message: `${tokenName} 探索已在进行中，跳过开始`,
+          type: "info",
         });
         return true;
-      } catch (err) {
-        const msg = err.message || "";
-        // 200020 = 已在探索中/无可开始, 视为已开始
-        if (msg.includes("200020")) {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${tokenName} 探索已在进行中`,
-            type: "info",
-          });
-          return true;
-        }
-        // 命令不存在(响应超时)或其它错误 → 尝试下一个候选
       }
+    } catch {
+      // 读取失败则继续尝试直接开始
     }
-    addLog({
-      time: new Date().toLocaleTimeString(),
-      message: `${tokenName} 未能确认开始探索(候选命令均未被接受)，请在游戏内抓包「开始」按钮的发送指令后反馈`,
-      type: "warning",
-    });
-    return false;
+
+    try {
+      await tokenStore.sendMessageWithPromise(
+        tokenId,
+        EXPLORE_START_CMD,
+        {},
+        5000,
+      );
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `${tokenName} 已开始探索(${EXPLORE_START_CMD})，探索周期开始产出残卷`,
+        type: "success",
+      });
+      return true;
+    } catch (err) {
+      const msg = err.message || "";
+      if (msg.includes("200020")) {
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${tokenName} 探索已在进行中`,
+          type: "info",
+        });
+        return true;
+      }
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `${tokenName} 开始探索失败: ${msg || "未知错误"}`,
+        type: "error",
+      });
+      return false;
+    }
   };
 
   /**
@@ -198,11 +215,7 @@ export function createTasksLegacy(deps) {
         const started = await tryStartExplore(tokenId, token.name);
         tokenStatus.value[tokenId] = "completed";
         if (!started) {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${token.name} 开始探索未确认，请抓包「开始」按钮的发送指令后反馈`,
-            type: "warning",
-          });
+          tokenStatus.value[tokenId] = "failed";
         }
       } catch (error) {
         console.error(error);
