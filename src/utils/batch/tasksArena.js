@@ -264,7 +264,6 @@ export function createTasksArena(deps) {
         const myMonthInfo = act.myMonthInfo || {};
         const fishNum = Number(myMonthInfo?.["2"]?.num || 0);
 
-        const monthProgress = calculateMonthProgress();
         const now = new Date();
         const daysInMonth = new Date(
           now.getFullYear(),
@@ -273,14 +272,16 @@ export function createTasksArena(deps) {
         ).getDate();
         const dayOfMonth = now.getDate();
         const remainingDays = Math.max(0, daysInMonth - dayOfMonth);
-        const shouldBe =
-          remainingDays === 0
-            ? FISH_TARGET
-            : Math.min(FISH_TARGET, Math.ceil(monthProgress * FISH_TARGET));
+        // 目标 = 320 - 剩余天数×3(每天3次免费钓鱼由每日任务自动消耗)
+        // 例: 9/26 剩4天 → 今天补到 308, 剩余12次由后续免费钓鱼补满, 月底正好 320
+        const shouldBe = Math.min(
+          FISH_TARGET,
+          FISH_TARGET - remainingDays * 3,
+        );
         const need = Math.max(0, shouldBe - fishNum);
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `${token.name} 当前进度: ${fishNum}/${FISH_TARGET}，需要补齐: ${need}次`,
+          message: `${token.name} 当前进度: ${fishNum}/${FISH_TARGET}，今日目标: ${shouldBe}（剩${remainingDays}天×3次免费），需要补齐: ${need}次`,
           type: "info",
         });
         if (need <= 0) {
