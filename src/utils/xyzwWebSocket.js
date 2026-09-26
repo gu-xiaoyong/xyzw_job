@@ -362,9 +362,9 @@ export function registerDefaultCommands(reg) {
     .register("pkroom_getinfo")
     .register("pkroom_getfightroominfo")
     .register("pkroom_getfightroomdetail")
-    .register("pkroom_bookfight")
-    .register("pkroom_bookfightroom")
-    .register("pkroom_bookmatch")
+    .register("pkroom_appoint")
+    .register("pkroom_appointroom")
+    .register("pkroom_appointmatch")
 
     // 珍宝阁相关
     .register("collection_claimfreereward")
@@ -1203,9 +1203,9 @@ export class XyzwWebSocketClient {
       pkroom_getinforesp: "pkroom_getinfo",
       pkroom_getfightroominforesp: "pkroom_getfightroominfo",
       pkroom_getfightroomdetailresp: "pkroom_getfightroomdetail",
-      pkroom_bookfightresp: "pkroom_bookfight",
-      pkroom_bookfightroomresp: "pkroom_bookfightroom",
-      pkroom_bookmatchresp: "pkroom_bookmatch",
+      pkroom_appointresp: "pkroom_appoint",
+      pkroom_appointroomresp: "pkroom_appointroom",
+      pkroom_appointmatchresp: "pkroom_appointmatch",
       legacy_sendgiftresp: "legacy_sendgift",
       legacy_getgiftsresp: "legacy_getgifts",
       // 盐杯竞猜响应映射

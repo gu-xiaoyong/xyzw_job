@@ -26,12 +26,13 @@ export function createTasksPKRoom(deps) {
     delayConfig,
   } = deps;
 
-  // 预约比赛命令候选(按 PKRoom 命名规律推测)。命令不存在只会超时, 无副作用;
-  // 预约成功的响应是不可路由的推送(无 cmd/resp), 因此以角色数据校验为准。
+  // 预约比赛命令候选: 服务器把预约叫 appoint(状态键 pk:appoint:room:id),
+  // 按 PKRoom 命名规律推测。命令不存在只会超时, 无副作用;
+  // 预约成功的回包是按 resp 路由的 SyncResp, 超时的候选再用角色数据校验。
   const PK_BOOK_CMD_CANDIDATES = [
-    "pkroom_bookfight",
-    "pkroom_bookfightroom",
-    "pkroom_bookmatch",
+    "pkroom_appoint",
+    "pkroom_appointroom",
+    "pkroom_appointmatch",
   ];
 
   /**
@@ -124,6 +125,14 @@ export function createTasksPKRoom(deps) {
             type: "success",
           });
           return true;
+        }
+        // 有真实报错(非超时)的候选记 info, 便于发现协议差异
+        if (!msg.includes("超时") && !msg.includes("timeout")) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${tokenName} ${cmd} 未生效: ${msg}`,
+            type: "info",
+          });
         }
         // 未确认 → 尝试下一个候选
       }
