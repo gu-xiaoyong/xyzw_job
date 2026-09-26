@@ -48,7 +48,7 @@ export function createTasksLegacy(deps) {
         await tokenStore.sendMessageWithPromise(tokenId, cmd, {}, 4000);
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `${token.name} 已发送开始探索指令(${cmd})，探索周期开始产出残卷`,
+          message: `${tokenName} 已发送开始探索指令(${cmd})，探索周期开始产出残卷`,
           type: "success",
         });
         return true;
@@ -58,7 +58,7 @@ export function createTasksLegacy(deps) {
         if (msg.includes("200020")) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `${token.name} 探索已在进行中`,
+            message: `${tokenName} 探索已在进行中`,
             type: "info",
           });
           return true;
@@ -68,7 +68,7 @@ export function createTasksLegacy(deps) {
     }
     addLog({
       time: new Date().toLocaleTimeString(),
-      message: `${token.name} 未能确认开始探索(候选命令均未被接受)，请在游戏内抓包「开始」按钮的发送指令后反馈`,
+      message: `${tokenName} 未能确认开始探索(候选命令均未被接受)，请在游戏内抓包「开始」按钮的发送指令后反馈`,
       type: "warning",
     });
     return false;
