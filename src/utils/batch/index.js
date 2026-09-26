@@ -23,3 +23,4 @@ export { createTasksFootball } from './tasksFootball.js';
 export { createTasksApex } from './tasksApex.js';
 export { createTasksCampChallenge } from './tasksCampChallenge.js';
 export { createTasksXuanwuBlessing } from './tasksXuanwuBlessing.js';
+export { createTasksPKRoom } from './tasksPKRoom.js';

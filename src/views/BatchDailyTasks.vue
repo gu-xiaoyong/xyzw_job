@@ -402,6 +402,13 @@
                 >
                   一键灯神扫荡
                 </n-button>
+                <n-button
+                  size="small"
+                  @click="batchBookPKMatch"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                >
+                  一键预约比赛
+                </n-button>
                 <n-popselect
                   :value="campChallengeMode"
                   :options="campChallengeModeOptions"
@@ -3235,6 +3242,7 @@ import {
   createTasksApex,
   createTasksCampChallenge,
   createTasksXuanwuBlessing,
+  createTasksPKRoom,
 } from "@/utils/batch";
 import {
   blackMarketItemCatalog,
@@ -3941,6 +3949,7 @@ const taskGroupDefinitions = [
       "batchCampClaimTasks",
       "store_syncpurchaseconfig",
       "store_purchase",
+      "batchBookPKMatch",
       "collection_claimfreereward",
       "batchClaimMail",
       "batchClaimActivity",
@@ -6664,6 +6673,9 @@ const { batchCampChallenge, batchCampChallengePet, batchCampClaimTasks } = tasks
 
 const tasksXuanwuBlessing = createTasksXuanwuBlessing(createTaskDeps());
 const { batchXuanwuBlessing } = tasksXuanwuBlessing;
+
+const tasksPKRoom = createTasksPKRoom(createTaskDeps());
+const { batchBookPKMatch } = tasksPKRoom;
 
 // 营地挑战模式选择
 const campChallengeMode = ref("pet");
