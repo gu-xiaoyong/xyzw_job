@@ -130,15 +130,17 @@ export function createTasksLegacy(deps) {
         tokenStatus.value[tokenId] = "completed";
       } catch (error) {
         console.error(error);
-        // 200020 = 暂无可领取（挂机无积累），全员正常情况，降级 info 不算失败
+        // 200020 = 暂无可领取（挂机无积累）; 12400000 = 领取间隔未到（刚开启探索等），均为正常情况，降级 info 不算失败
         const codeMatch = /服务器错误: (\d+)/.exec(error.message || "");
         const errorCode = error?.code ?? (codeMatch ? Number(codeMatch[1]) : null);
-        if (errorCode === 200020) {
+        if (errorCode === 200020 || errorCode === 12400000) {
           tokenStatus.value[tokenId] = "completed";
-          // 挂机无积累: 多半是新赛季探索未开始, 用「批量功法残卷开启」按钮批量开启
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `${token.name} 暂无可领取的功法残卷（若为新赛季请先用「批量功法残卷开启」开始探索）`,
+            message:
+              errorCode === 200020
+                ? `${token.name} 暂无可领取的功法残卷（若为新赛季请先用「批量功法残卷开启」开始探索）`
+                : `${token.name} 挂机奖励领取间隔未到，稍后再领`,
             type: "info",
           });
         } else {
