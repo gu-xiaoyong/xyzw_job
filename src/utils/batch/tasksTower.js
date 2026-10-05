@@ -22,18 +22,27 @@ import { normalizeWeirdTowerMaxClimb } from "../towerClimbLimit.js";
 async function claimPendingEvoTowerRewards(tokenStore, tokenId, onLog) {
   let claimed = 0;
   for (let i = 0; i < 40; i++) {
-    let info;
-    try {
-      info = await tokenStore.sendMessageWithPromise(
-        tokenId,
-        "evotower_getinfo",
-        {},
-        5000,
-      );
-    } catch (e) {
-      onLog?.(`读取怪异塔信息失败: ${e?.message || e}`, "error");
-      return claimed;
+    // 限频(400340)时 getinfo 会集中失败,重试几次等限频窗口过去:
+    // 否则章节奖励领不了,后续 readyfight 会被 12200020(层次奖励未领取)拒绝
+    let info = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        info = await tokenStore.sendMessageWithPromise(
+          tokenId,
+          "evotower_getinfo",
+          {},
+          5000,
+        );
+        break;
+      } catch (e) {
+        onLog?.(
+          `读取怪异塔信息失败(${attempt}/3): ${e?.message || e}`,
+          attempt >= 3 ? "error" : "warning",
+        );
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 3000));
+      }
     }
+    if (!info) return claimed;
     const tower = info?.evoTower || {};
     const towerId = Number(tower.towerId ?? 0);
     const rewardTowerId = Number(tower.rewardTowerId ?? 0);
@@ -673,16 +682,21 @@ export function createTasksTower(deps) {
 
             await new Promise((r) => setTimeout(r, 1000));
 
-            try {
-              const evotowerinfoRefresh2 = await tokenStore.sendMessageWithPromise(
-                tokenId,
-                "evotower_getinfo",
-                {},
-                5000,
-              );
-              currentEnergy = evotowerinfoRefresh2?.evoTower?.energy || 0;
-            } catch (e) {
-              // 忽略刷新失败
+            // 出错后多试几次读取真实体力:若实际已耗尽,循环会以"体力耗尽"自然结束,
+            // 而不是在体力读不到的情况下盲试3次后以"连续失败次数过多"停止
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              try {
+                const evotowerinfoRefresh2 = await tokenStore.sendMessageWithPromise(
+                  tokenId,
+                  "evotower_getinfo",
+                  {},
+                  5000,
+                );
+                currentEnergy = evotowerinfoRefresh2?.evoTower?.energy || 0;
+                break;
+              } catch (e) {
+                if (attempt < 3) await new Promise((r) => setTimeout(r, 3000));
+              }
             }
           }
         }
