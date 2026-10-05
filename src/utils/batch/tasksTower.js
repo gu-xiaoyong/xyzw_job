@@ -442,7 +442,6 @@ export function createTasksTower(deps) {
         );
         let consecutiveFailures = 0;
         let lastFloor = Number(evotowerinfo1?.evoTower?.towerId ?? 0);
-        let noProgress = 0;
         let stopReason = "";
         let freeEnergyTried = false;
 
@@ -545,16 +544,16 @@ export function createTasksTower(deps) {
               type: "info",
             });
 
-            // 卡层检测:战斗执行了但层数没推进,大概率打不过
+            // 卡层提示:战斗执行了但层数没推进,大概率打不过。
+            // 不中断:打输同样消耗体力,继续打到体力耗尽为止(体力归零后循环自然结束)
             if (nowFloor > lastFloor) {
-              noProgress = 0;
               lastFloor = nowFloor;
             } else {
-              noProgress++;
-              if (noProgress >= 3) {
-                stopReason = `连续 3 次未能通过第 ${lastFloor} 层（可能战力不足）`;
-                break;
-              }
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 第 ${lastFloor} 层未能通过（可能战力不足），剩余体力 ${currentEnergy}，继续尝试`,
+                type: "warning",
+              });
             }
 
             // 体力耗尽时,尝试领取怪异塔免费道具补充一次
