@@ -221,10 +221,13 @@ export function createTasksTower(deps) {
                }
             }
           } catch (err) {
-            if (err.message && err.message.includes("200400")) {
+            if (
+              err.message &&
+              (err.message.includes("200400") || err.message.includes("400340"))
+            ) {
               addLog({
                 time: new Date().toLocaleTimeString(),
-                message: `${token.name} 操作过快 (200400)，等待5秒后重试...`,
+                message: `${token.name} 操作过快/被限频，等待5秒后重试...`,
                 type: "warning",
               });
               await new Promise((r) => setTimeout(r, 5000));
@@ -441,6 +444,7 @@ export function createTasksTower(deps) {
           weirdTowerMaxClimb?.value ?? weirdTowerMaxClimb,
         );
         let consecutiveFailures = 0;
+        let consecutiveRateLimit = 0;
         let lastFloor = Number(evotowerinfo1?.evoTower?.towerId ?? 0);
         let stopReason = "";
         let freeEnergyTried = false;
@@ -450,6 +454,9 @@ export function createTasksTower(deps) {
           message: `${token.name} 当前第 ${lastFloor} 层，本次最多爬 ${MAX_CLIMB} 次`,
           type: "info",
         });
+
+        // 多账号并行爬塔时随机错开起跑,降低整点齐发触发服务器限频(400340)的概率
+        await new Promise((r) => setTimeout(r, Math.floor(Math.random() * 3000)));
 
         while (currentEnergy > 0 && count < MAX_CLIMB && !shouldStop.value) {
           try {
@@ -472,15 +479,23 @@ export function createTasksTower(deps) {
 
             count++;
             consecutiveFailures = 0;
+            consecutiveRateLimit = 0;
 
             await new Promise((r) => setTimeout(r, 500));
 
-            const evotowerinfo2 = await tokenStore.sendMessageWithPromise(
-              tokenId,
-              "evotower_getinfo",
-              {},
-              5000,
-            );
+            // 战斗已结算;此处读塔信息若被限频(400340)等失败,不应计为战斗失败,
+            // 只跳过本轮每日任务/章节奖励领取,层数体力由下方刷新兜底
+            let evotowerinfo2 = null;
+            try {
+              evotowerinfo2 = await tokenStore.sendMessageWithPromise(
+                tokenId,
+                "evotower_getinfo",
+                {},
+                5000,
+              );
+            } catch (e) {
+              // 读取失败不影响本场战斗结果
+            }
 
             // 检查并领取每日任务奖励
             if (evotowerinfo2 && evotowerinfo2.evoTower && evotowerinfo2.evoTower.taskClaimMap) {
@@ -525,6 +540,7 @@ export function createTasksTower(deps) {
 
             // 刷新能量与层数
             let nowFloor = lastFloor;
+            let infoRefreshed = false;
             try {
               const evotowerinfoRefresh1 = await tokenStore.sendMessageWithPromise(
                 tokenId,
@@ -534,8 +550,18 @@ export function createTasksTower(deps) {
               );
               currentEnergy = evotowerinfoRefresh1?.evoTower?.energy || 0;
               nowFloor = Number(evotowerinfoRefresh1?.evoTower?.towerId ?? lastFloor);
+              infoRefreshed = true;
             } catch (e) {
-              // 忽略刷新失败
+              // 忽略刷新失败(如限频),本轮沿用旧值
+            }
+
+            if (!infoRefreshed) {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 第 ${count} 次战斗完成（塔信息刷新失败，本轮未确认层数/体力）`,
+                type: "warning",
+              });
+              continue;
             }
 
             addLog({
@@ -597,12 +623,34 @@ export function createTasksTower(deps) {
               }
             }
           } catch (err) {
+            // 400340/200400 均为服务器限频(操作过快):退避等待后重试,不计入战斗失败次数
+            // (12:00 批量爬塔日志显示,10 账号并行会在第10层领奖集中爆发时全体触发 400340,
+            //  原先按普通失败计数+仅等1秒,导致限频风暴烧光体力后以"连续失败次数过多"停止)
+            if (
+              err.message &&
+              (err.message.includes("400340") || err.message.includes("200400"))
+            ) {
+              consecutiveRateLimit++;
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 被服务器限频，等待5秒后重试 (限频 ${consecutiveRateLimit}/20)`,
+                type: "warning",
+              });
+              if (consecutiveRateLimit >= 20) {
+                stopReason = "持续被限频(400340)";
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} ${stopReason}，停止爬怪异塔`,
+                  type: "error",
+                });
+                break;
+              }
+              await new Promise((r) => setTimeout(r, 5000));
+              continue;
+            }
+
+            consecutiveRateLimit = 0;
             consecutiveFailures++;
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `战斗出错: ${err.message} (重试 ${consecutiveFailures}/3)`,
-              type: "warning",
-            });
 
             // "层次奖励未领取"会导致 readyfight 被拒,重试前先按服务器状态补领
             await claimPendingEvoTowerRewards(tokenStore, tokenId, (message, type) =>
