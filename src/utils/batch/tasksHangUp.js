@@ -2,6 +2,17 @@
  * 挂机、答题、签到类任务
  * 包含: claimHangUpRewards, batchAddHangUpTime, batchStudy, batchclubsign
  */
+import { isInCurrentWeek } from "@/utils/base";
+
+/**
+ * 判断本周答题是否已完成（答满10题且开始时间在本周内）
+ */
+const isStudyCompletedThisWeek = (study) => {
+  if (!study || study.maxCorrectNum === undefined || study.beginTime === undefined) {
+    return false;
+  }
+  return Number(study.maxCorrectNum) >= 10 && isInCurrentWeek(Number(study.beginTime) * 1000);
+};
 
 /**
  * 创建挂机、答题、签到类任务执行器
@@ -223,6 +234,31 @@ export function createTasksHangUp(deps) {
         });
 
         await ensureConnection(tokenId);
+
+        // 本周已答满10题并领过奖励的账号直接跳过，不重复答题
+        try {
+          const roleInfo = await tokenStore.sendMessageWithPromise(
+            tokenId,
+            "role_getroleinfo",
+            {},
+            8000,
+          );
+          if (isStudyCompletedThisWeek(roleInfo?.role?.study)) {
+            tokenStatus.value[tokenId] = "completed";
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 本周已答满10题并领取奖励，跳过答题`,
+              type: "success",
+            });
+            return;
+          }
+        } catch (e) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 查询答题状态失败，继续正常答题流程`,
+            type: "warning",
+          });
+        }
 
         // Reset local study status
         tokenStore.gameData.studyStatus = {

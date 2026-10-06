@@ -24,6 +24,31 @@ export const StudyPlugin = ({
       return
     }
 
+    // 服务器未下发题目：本周已答满10题并领过奖励，无需重复答题
+    if (questionList.length === 0) {
+      gameLogger.info('服务器未返回题目，本周已答完并领过奖励，跳过答题和领奖')
+      gameData.value.studyStatus = {
+        ...gameData.value.studyStatus,
+        isAnswering: false,
+        questionCount: 0,
+        answeredCount: 0,
+        status: 'completed',
+        timestamp: Date.now(),
+        thisWeek: true,
+        isCompleted: true
+      }
+      // 稍作停留让批量任务轮询到完成状态，再复位
+      await sleep(1500)
+      gameData.value.studyStatus = {
+        isAnswering: false,
+        questionCount: 0,
+        answeredCount: 0,
+        status: '',
+        timestamp: null
+      }
+      return
+    }
+
     if (!studyId) {
       gameLogger.error('未找到学习ID')
       return
@@ -51,7 +76,7 @@ export const StudyPlugin = ({
 
         if (answer === null) {
           answer = 1
-          gameLogger.verbose(`未找到匹配答案，使用默认答案: ${answer}`)
+          gameLogger.debug(`题库未命中，使用默认答案: ${answer}，题目: ${questionText}`)
         } else {
           gameLogger.debug(`找到答案: ${answer}`)
         }

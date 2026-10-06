@@ -72,7 +72,6 @@ const study = computed(() => tokenStore.gameData.studyStatus);
 const startStudy = async () => {
   if (!tokenStore.selectedToken || study.value.thisWeek) return;
   if (study.value.status != "" && study.value.status != "idel") return;
-  console.log("开始答题", study.value);
 
   study.value.status = "starting";
   await preloadQuestions();
@@ -80,8 +79,6 @@ const startStudy = async () => {
   const questionCount = await getQuestionCount();
   message.info(`🚀 开始一键答题... (题库包含 ${questionCount} 道题目)`);
 
-  if (study.value.isCompleted)
-    return message.success("✅ 咸鱼大冲关任务已完成，无需重复作答！");
   try {
     tokenStore.gameData.studyStatus = {
       ...tokenStore.gameData.studyStatus,
@@ -106,7 +103,6 @@ const startStudy = async () => {
         message.warning("答题超时，已自动重置状态");
       }
     }, 40000);
-    message.info(`🚀 开始一键答题... (题库包含 ${questionCount} 道题目)`);
   } catch (error) {
     console.error("启动答题失败:", error);
     message.error("启动答题失败: " + error.message);
