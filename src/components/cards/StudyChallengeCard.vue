@@ -56,7 +56,7 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { useMessage } from "naive-ui";
 import {
   preloadQuestions,
@@ -68,6 +68,23 @@ import MyCard from "../Common/MyCard.vue";
 const tokenStore = useTokenStore();
 const message = useMessage();
 const study = computed(() => tokenStore.gameData.studyStatus);
+
+// 答题完成后弹出对错统计（仅单账号触发，批量任务在批量日志里看结果）
+watch(
+  () => study.value.status,
+  (status) => {
+    if (
+      status === "completed" &&
+      study.value.source === "single" &&
+      study.value.correctCount != null
+    ) {
+      const total = study.value.questionCount || 10;
+      message.success(
+        `✅ 答题完成: 共${total}题, 答对${study.value.correctCount}题, 答错${study.value.wrongCount}题`,
+      );
+    }
+  },
+);
 
 const startStudy = async () => {
   if (!tokenStore.selectedToken || study.value.thisWeek) return;
@@ -87,6 +104,10 @@ const startStudy = async () => {
       answeredCount: 0,
       status: "starting",
       timestamp: Date.now(),
+      baseCorrect: null,
+      correctCount: null,
+      wrongCount: null,
+      source: "single",
     };
     const tokenId = tokenStore.selectedToken.id;
     tokenStore.sendMessage(tokenId, "study_startgame");

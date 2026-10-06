@@ -111,6 +111,10 @@ export const useTokenStore = defineStore("tokens", () => {
       answeredCount: 0,
       status: "", // '', 'starting', 'answering', 'claiming_rewards', 'completed'
       timestamp: null,
+      baseCorrect: null as number | null, // 本轮开始时的累计答对数
+      correctCount: null as number | null, // 本轮答对题数
+      wrongCount: null as number | null, // 本轮答错题数
+      source: null as string | null, // 'single' | 'batch' 触发来源
     },
     lastUpdated: null as string | null,
   });
