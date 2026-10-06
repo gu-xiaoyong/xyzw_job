@@ -278,12 +278,27 @@ export function createTasksHangUp(deps) {
         };
 
         // Send start command
-        const startResp = await tokenStore.sendMessageWithPromise(
-          tokenId,
-          "study_startgame",
-          {},
-          5000,
-        );
+        let startResp;
+        try {
+          startResp = await tokenStore.sendMessageWithPromise(
+            tokenId,
+            "study_startgame",
+            {},
+            5000,
+          );
+        } catch (err) {
+          // 3100080: 今日答题次数已用完（每天仅3次答题机会）
+          if (err?.code === 3100080) {
+            tokenStatus.value[tokenId] = "skipped";
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 今日答题机会已用完(每天3次)，明天再试`,
+              type: "warning",
+            });
+            return;
+          }
+          throw err;
+        }
         const totalQuestions = Array.isArray(startResp?.questionList)
           ? startResp.questionList.length
           : null;
@@ -337,6 +352,7 @@ export function createTasksHangUp(deps) {
           });
 
           // 结算本轮答对/答错题数（用各自账号的连接查询，避免共享状态串号）
+          // maxCorrectNum 为本周最高答对数：仅当本轮刷新纪录(或首次作答)时能确定本轮答对数
           if (beforeCorrect !== null) {
             try {
               const afterInfo = await tokenStore.sendMessageWithPromise(
@@ -348,16 +364,26 @@ export function createTasksHangUp(deps) {
               const after = Number(afterInfo?.role?.study?.maxCorrectNum);
               if (!Number.isNaN(after)) {
                 const total = totalQuestions ?? 10;
-                const correct = Math.min(
-                  Math.max(after - beforeCorrect, 0),
-                  total,
-                );
-                const wrong = Math.max(total - correct, 0);
-                addLog({
-                  time: new Date().toLocaleTimeString(),
-                  message: `${token.name} 答题结果: 共${total}题, 答对${correct}题, 答错${wrong}题 (本周累计答对${after}/10)`,
-                  type: "success",
-                });
+                let correct = null;
+                if (after > beforeCorrect) {
+                  correct = Math.min(after, total);
+                } else if (beforeCorrect === 0) {
+                  correct = 0;
+                }
+                if (correct !== null) {
+                  const wrong = Math.max(total - correct, 0);
+                  addLog({
+                    time: new Date().toLocaleTimeString(),
+                    message: `${token.name} 答题结果: 共${total}题, 答对${correct}题, 答错${wrong}题 (本周最高答对${after}/10)`,
+                    type: "success",
+                  });
+                } else {
+                  addLog({
+                    time: new Date().toLocaleTimeString(),
+                    message: `${token.name} 本轮未超越本周最高答对${after}/10，无法统计本轮对错`,
+                    type: "warning",
+                  });
+                }
               }
             } catch (e) {
               // 查询答题结果失败不影响任务结果

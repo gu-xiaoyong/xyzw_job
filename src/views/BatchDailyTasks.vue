@@ -3449,7 +3449,7 @@ const warGuessActivityTip = computed(() => {
 });
 
 const selectedTokens = ref([]);
-const tokenStatus = ref({}); // { tokenId: 'waiting' | 'running' | 'completed' | 'failed' }
+const tokenStatus = ref({}); // { tokenId: 'waiting' | 'running' | 'completed' | 'failed' | 'skipped' }
 const isRunning = ref(false);
 const shouldStop = ref(false);
 
@@ -6185,6 +6185,7 @@ const getStatusType = (tokenId) => {
   if (status === "completed") return "success";
   if (status === "failed") return "error";
   if (status === "running") return "info";
+  if (status === "skipped") return "warning";
   return "default";
 };
 
@@ -6193,6 +6194,7 @@ const getStatusText = (tokenId) => {
   if (status === "completed") return "已完成";
   if (status === "failed") return "失败";
   if (status === "running") return "执行中";
+  if (status === "skipped") return "已跳过";
   return "等待中";
 };
 

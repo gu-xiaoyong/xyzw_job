@@ -152,18 +152,28 @@ export const StudyPlugin = ({
 
     gameLogger.info('一键答题完成！已尝试领取所有奖励')
 
-    // 结算答题结果：maxCorrectNum 为本周累计答对题数，与开始时差值即本轮答对数
+    // 结算答题结果：maxCorrectNum 为本周最高答对数，与开始时对比得出本轮对错
     try {
       const res: any = await client?.sendWithPromise('role_getroleinfo', {}, 8000)
       const after = Number(res?.role?.study?.maxCorrectNum)
       const base = Number(gameData.value.studyStatus.baseCorrect ?? 0)
       const total = Number(gameData.value.studyStatus.questionCount ?? 0)
       if (!Number.isNaN(after)) {
-        const correct = Math.min(Math.max(after - base, 0), total > 0 ? total : Math.max(after - base, 0))
-        const wrong = Math.max(total - correct, 0)
-        gameData.value.studyStatus.correctCount = correct
-        gameData.value.studyStatus.wrongCount = wrong
-        gameLogger.info(`答题结果: 共${total}题, 答对${correct}题, 答错${wrong}题 (本周累计答对${after}/10)`)
+        // 仅当本轮刷新纪录(或首次作答)时能确定本轮答对数
+        let correct: number | null = null
+        if (after > base) {
+          correct = Math.min(after, total > 0 ? total : after)
+        } else if (base === 0) {
+          correct = 0
+        }
+        if (correct !== null) {
+          const wrong = Math.max(total - correct, 0)
+          gameData.value.studyStatus.correctCount = correct
+          gameData.value.studyStatus.wrongCount = wrong
+          gameLogger.info(`答题结果: 共${total}题, 答对${correct}题, 答错${wrong}题 (本周最高答对${after}/10)`)
+        } else {
+          gameLogger.info(`本轮未超越本周最高答对${after}/10，无法统计本轮对错`)
+        }
       }
     } catch (error) {
       gameLogger.warn('查询答题结果失败:', error)
