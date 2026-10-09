@@ -3,9 +3,9 @@
     <!-- 顶部操作工具栏 -->
     <div class="toolbar">
       <div class="left">
-        <n-tag :type="isMatchDay ? 'success' : 'info'" round size="small">
+        <NTag :type="isMatchDay ? 'success' : 'info'" round size="small">
           {{ scheduleText }}
-        </n-tag>
+        </NTag>
         <span class="match-title">营地挑战（30人俱乐部对决）</span>
         <n-radio-group
           v-model:value="selectedSide"
@@ -17,7 +17,7 @@
         </n-radio-group>
       </div>
       <div class="right">
-        <n-button
+        <NButton
           size="small"
           :disabled="currentMemberList.length === 0 || exporting"
           :loading="exporting"
@@ -28,9 +28,9 @@
             <n-icon><CopyOutline /></n-icon>
           </template>
           导出长图
-        </n-button>
+        </NButton>
 
-        <n-button
+        <NButton
           size="small"
           :disabled="loading"
           :loading="loading"
@@ -41,7 +41,7 @@
             <n-icon><RefreshOutline /></n-icon>
           </template>
           刷新战况
-        </n-button>
+        </NButton>
       </div>
     </div>
 
@@ -63,7 +63,7 @@
                   ? `${battleInfo.ownClub.serverId}服`
                   : "本服"
               }}</span>
-              <n-avatar
+              <NAvatar
                 round
                 :size="36"
                 :src="battleInfo.ownClub.logo || '/icons/xiaoyugan.png'"
@@ -89,9 +89,9 @@
             <span class="vs-v">V</span><span class="vs-s">S</span>
           </div>
           <div class="rank-badge-text">
-            <n-tag type="warning" size="small" round :bordered="false">
+            <NTag type="warning" size="small" round :bordered="false">
               {{ rankText }}
-            </n-tag>
+            </NTag>
           </div>
         </div>
 
@@ -110,7 +110,7 @@
                   ? `${battleInfo.opponentClub.serverId}服`
                   : "跨服"
               }}</span>
-              <n-avatar
+              <NAvatar
                 round
                 :size="36"
                 :src="battleInfo.opponentClub.logo || '/icons/xiaoyugan.png'"
@@ -142,7 +142,7 @@
             <div class="panel-title-group">
               <n-icon class="panel-icon"><CalendarOutline /></n-icon>
               <span class="panel-title">当周对战信息</span>
-              <n-tag
+              <NTag
                 size="tiny"
                 type="info"
                 round
@@ -150,7 +150,7 @@
                 class="cycle-tag"
               >
                 周更新制 · 第 {{ weeklyStats.phase }} 期
-              </n-tag>
+              </NTag>
             </div>
             <div class="panel-subtitle">
               周期: {{ weeklyStats.cycleRange }} (每周一刷新重置)
@@ -175,12 +175,12 @@
               <div class="metric-value personal-score">
                 {{ weeklyStats.personalScore
                 }}<span class="metric-unit">分</span>
-                <n-tag
+                <NTag
                   size="tiny"
                   type="warning"
                   :bordered="false"
                   class="level-tag"
-                  >Lv.{{ weeklyStats.personalLevel }}</n-tag
+                  >Lv.{{ weeklyStats.personalLevel }}</NTag
                 >
               </div>
             </div>
@@ -220,14 +220,14 @@
             <div class="panel-title-group">
               <n-icon class="panel-icon flame"><FlameOutline /></n-icon>
               <span class="panel-title">当天公会对战信息</span>
-              <n-tag
+              <NTag
                 size="tiny"
                 :type="isMatchDay ? 'success' : 'default'"
                 round
                 :bordered="false"
               >
                 {{ isMatchDay ? "今日交战中" : "非排位日" }}
-              </n-tag>
+              </NTag>
             </div>
             <div class="panel-subtitle">
               今日对决对手:
@@ -370,17 +370,17 @@
             </span>
           </div>
           <div class="map-metrics-summary">
-            <n-tag type="info" size="small" round :bordered="false">
+            <NTag type="info" size="small" round :bordered="false">
               总据点: {{ mapStats.total }}
-            </n-tag>
-            <n-tag type="success" size="small" round :bordered="false">
+            </NTag>
+            <NTag type="success" size="small" round :bordered="false">
               坚守存活: {{ mapStats.aliveCount }} 人
-            </n-tag>
-            <n-tag type="error" size="small" round :bordered="false">
+            </NTag>
+            <NTag type="error" size="small" round :bordered="false">
               已被击破: {{ mapStats.defeatedCount }} 人 ({{
                 mapStats.defeatedRate
               }}%)
-            </n-tag>
+            </NTag>
           </div>
           <div class="map-filters-group">
             <n-radio-group v-model:value="mapFilter" size="small">
@@ -394,7 +394,7 @@
                 >💥 仅击破 ({{ mapStats.defeatedCount }})</n-radio-button
               >
             </n-radio-group>
-            <n-select
+            <NSelect
               v-model:value="mapSort"
               :options="mapSortOptions"
               size="small"
@@ -407,7 +407,7 @@
         <div class="fortress-grid">
           <div
             v-for="item in displayMapList"
-            :key="'slot_' + item.slot + '_' + item.id + '_' + (item.mirror ? 'mirror' : 'real')"
+            :key="`slot_${item.slot}_${item.id}_${item.mirror ? 'mirror' : 'real'}`"
             class="fortress-card"
             :class="{
               'is-defeated': item.defeated,
@@ -420,16 +420,20 @@
             <div class="card-header-bar">
               <span class="slot-badge">
                 #{{ item.slot || "?" }} 据点
-                <n-tag
+                <NTag
                   v-if="item.mirror"
                   size="tiny"
                   type="warning"
                   round
                   :bordered="false"
-                  style="margin-left: 4px; transform: scale(0.9); transform-origin: left center;"
+                  style="
+                    margin-left: 4px;
+                    transform: scale(0.9);
+                    transform-origin: left center;
+                  "
                 >
                   镜像
-                </n-tag>
+                </NTag>
               </span>
               <div class="stamp-wrapper">
                 <span v-if="item.defeated" class="stamp stamp-defeated"
@@ -442,13 +446,13 @@
             <!-- 卡片中间：头像与基本信息 -->
             <div class="card-body">
               <div class="avatar-box">
-                <n-avatar
+                <NAvatar
                   round
                   :size="46"
                   :src="item.headImg || '/icons/xiaoyugan.png'"
                   class="fortress-avatar"
                 />
-                <n-tag
+                <NTag
                   v-if="item.redQuench > 0"
                   size="tiny"
                   round
@@ -456,18 +460,23 @@
                   class="red-quench-tag"
                 >
                   {{ item.redQuench }}红
-                </n-tag>
+                </NTag>
               </div>
               <div class="member-detail">
                 <div class="member-name" :title="item.name">
                   {{ item.name }}
-                  <span v-if="item.mirror" class="mirror-text" style="font-size: 11px; color: #f0a020; margin-left: 2px;">(镜像)</span>
+                  <span
+                    v-if="item.mirror"
+                    class="mirror-text"
+                    style="font-size: 11px; color: #f0a020; margin-left: 2px"
+                    >(镜像)</span
+                  >
                 </div>
                 <div class="member-power">{{ formatPower(item.power) }}</div>
                 <div class="member-lineup">
-                  <n-tag size="tiny" :bordered="false" type="info">
+                  <NTag size="tiny" :bordered="false" type="info">
                     {{ item.lineupType || "常规阵容" }}
-                  </n-tag>
+                  </NTag>
                 </div>
               </div>
             </div>
@@ -499,7 +508,7 @@
             <!-- 我方公会 -->
             <div class="side-score-box own-score-box">
               <div class="club-title">
-                <n-avatar
+                <NAvatar
                   round
                   :size="28"
                   :src="battleInfo.ownClub.logo || '/icons/xiaoyugan.png'"
@@ -565,7 +574,7 @@
             <!-- 对手公会 -->
             <div class="side-score-box oppo-score-box">
               <div class="club-title">
-                <n-avatar
+                <NAvatar
                   round
                   :size="28"
                   :src="battleInfo.opponentClub.logo || '/icons/xiaoyugan.png'"
@@ -667,7 +676,7 @@
             <div class="att-title-group">
               <n-icon class="att-icon"><FlameOutline /></n-icon>
               <span class="att-title">公会今日出刀督促台</span>
-              <n-tag
+              <NTag
                 size="small"
                 :type="
                   attendanceStats.unattackedCount === 0 &&
@@ -681,10 +690,10 @@
                 满刀率: {{ attendanceStats.completedRate }}% ({{
                   attendanceStats.completedCount
                 }}/{{ attendanceStats.total }})
-              </n-tag>
+              </NTag>
             </div>
             <div class="att-actions">
-              <n-button
+              <NButton
                 type="error"
                 size="small"
                 round
@@ -696,8 +705,8 @@
                   <n-icon><CopyOutline /></n-icon>
                 </template>
                 复制未动刀名单 (0/3次 · {{ attendanceStats.unattackedCount }}人)
-              </n-button>
-              <n-button
+              </NButton>
+              <NButton
                 type="warning"
                 size="small"
                 round
@@ -709,7 +718,7 @@
                 </template>
                 复制未打满名单 (1~2/3次 ·
                 {{ attendanceStats.incompleteCount }}人)
-              </n-button>
+              </NButton>
             </div>
           </div>
 
@@ -726,7 +735,7 @@
                 }}人，急需催刀）：</span
               >
               <div class="unattacked-tags">
-                <n-tag
+                <NTag
                   v-for="m in attendanceStats.unattacked"
                   :key="m.id"
                   size="small"
@@ -736,7 +745,7 @@
                   @click="openDuelModal(m)"
                 >
                   {{ m.name }} ({{ formatPower(m.power) }} · 0/3次)
-                </n-tag>
+                </NTag>
               </div>
             </div>
 
@@ -752,7 +761,7 @@
                 }}人，仍有剩余免费挑战机会）：</span
               >
               <div class="unattacked-tags">
-                <n-tag
+                <NTag
                   v-for="m in attendanceStats.incomplete"
                   :key="m.id"
                   size="small"
@@ -764,7 +773,7 @@
                   {{ m.name }} (出战{{ m.realAttackCnt }}/3次 · 剩{{
                     3 - m.realAttackCnt
                   }}次)
-                </n-tag>
+                </NTag>
               </div>
             </div>
 
@@ -776,9 +785,9 @@
                 attendanceStats.incompleteCount === 0
               "
             >
-              <n-tag size="medium" type="success" :bordered="false">
+              <NTag size="medium" type="success" :bordered="false">
                 🎉 太强了！我方 30 名成员今日免费挑战次数已全部出战打满！
-              </n-tag>
+              </NTag>
             </div>
           </div>
         </div>
@@ -808,7 +817,10 @@
           <n-data-table
             :columns="todayTableColumns"
             :data="sortedTodayMembers"
-            :row-key="(row: any) => 'slot_' + (row.slot || '') + '_' + row.id + '_' + (row.mirror ? 'mirror' : 'real')"
+            :row-key="
+              (row: any) =>
+                `slot_${row.slot || ''}_${row.id}_${row.mirror ? 'mirror' : 'real'}`
+            "
             :bordered="false"
             size="small"
             striped
@@ -846,21 +858,21 @@
                   idx === 0
                     ? "🥇 冠军位"
                     : idx === 1
-                    ? "🥈 亚军位"
-                    : idx === 2
-                    ? "🥉 季军位"
-                    : "第 4 名"
+                      ? "🥈 亚军位"
+                      : idx === 2
+                        ? "🥉 季军位"
+                        : "第 4 名"
                 }}
               </div>
               <div class="club-main-info">
                 <div class="club-title-row">
                   <span class="club-name">{{ club.name }}</span>
-                  <n-tag
+                  <NTag
                     v-if="club.id === battleInfo.ownClub.id"
                     size="tiny"
                     type="success"
                     round
-                    >我方</n-tag
+                    >我方</NTag
                   >
                 </div>
                 <div class="server-tag">
@@ -900,7 +912,10 @@
           <n-data-table
             :columns="weeklyRosterColumns"
             :data="sortedWeeklyRoster"
-            :row-key="(row: any) => 'slot_' + (row.slot || '') + '_' + row.id + '_' + (row.mirror ? 'mirror' : 'real')"
+            :row-key="
+              (row: any) =>
+                `slot_${row.slot || ''}_${row.id}_${row.mirror ? 'mirror' : 'real'}`
+            "
             :bordered="false"
             size="small"
             striped
@@ -920,7 +935,7 @@
           <span class="lineup-stats-label">
             {{ selectedSide === "opponent" ? "敌方" : "我方" }}阵容流派分布：
           </span>
-          <n-tag
+          <NTag
             v-for="item in lineupStats"
             :key="item.name"
             :color="item.colorProps"
@@ -929,14 +944,17 @@
             class="lineup-stats-tag"
           >
             {{ item.name }} ({{ item.count }}人)
-          </n-tag>
+          </NTag>
         </div>
 
         <!-- 30人真实布阵大宽表 -->
         <n-data-table
           :columns="columns"
           :data="currentMemberList"
-          :row-key="(row: any) => 'slot_' + (row.slot || '') + '_' + row.id + '_' + (row.mirror ? 'mirror' : 'real')"
+          :row-key="
+            (row: any) =>
+              `slot_${row.slot || ''}_${row.id}_${row.mirror ? 'mirror' : 'real'}`
+          "
           :bordered="false"
           size="small"
           striped
@@ -950,9 +968,9 @@
     <div v-else class="empty-state">
       <n-empty :description="emptyHint" size="large">
         <template #extra>
-          <n-button size="small" type="primary" @click="fetchCampChallengeData">
+          <NButton size="small" type="primary" @click="fetchCampChallengeData">
             点击重新查询
-          </n-button>
+          </NButton>
         </template>
       </n-empty>
     </div>
@@ -968,16 +986,16 @@
     >
       <template #header-extra>
         <span v-if="targetPlayer" class="player-id">
-          <n-tag
+          <NTag
             v-if="targetPlayer.mirror"
             size="small"
             type="warning"
             round
             :bordered="false"
-            style="margin-right: 8px;"
+            style="margin-right: 8px"
           >
             镜像据点
-          </n-tag>
+          </NTag>
           ID: {{ targetPlayer.id }}
         </span>
       </template>
@@ -985,7 +1003,7 @@
       <div v-if="targetPlayer" class="duel-content">
         <!-- 头部个人概览卡片 -->
         <div class="duel-player-header">
-          <n-avatar
+          <NAvatar
             round
             :size="56"
             :src="targetPlayer.headImg || '/icons/xiaoyugan.png'"
@@ -993,16 +1011,16 @@
           <div class="duel-player-info">
             <h3>
               {{ targetPlayer.name }}
-              <n-tag
+              <NTag
                 v-if="targetPlayer.mirror"
                 size="small"
                 type="warning"
                 round
                 :bordered="false"
-                style="margin-left: 8px;"
+                style="margin-left: 8px"
               >
                 镜像
-              </n-tag>
+              </NTag>
             </h3>
             <p>
               真实战力: {{ formatPower(targetPlayer.power) }} | 总红淬:
@@ -1066,13 +1084,13 @@
               >
                 <div
                   v-for="(combat, cIdx) in targetPlayerOffenseList"
-                  :key="'offense-' + cIdx"
+                  :key="`offense-${cIdx}`"
                   class="combat-item"
                   :class="combat.winFlag ? 'combat-win' : 'combat-loss'"
                 >
                   <div class="combat-left">
-                    <n-tag size="tiny" round type="info" class="combat-type-tag"
-                      >主动进攻</n-tag
+                    <NTag size="tiny" round type="info" class="combat-type-tag"
+                      >主动进攻</NTag
                     >
                     <span class="combat-time">{{
                       formatCombatTime(combat.timestamp)
@@ -1084,7 +1102,7 @@
                         ? "我方进攻成员:"
                         : "进攻目标对手:"
                     }}</span>
-                    <n-avatar
+                    <NAvatar
                       round
                       :size="24"
                       :src="
@@ -1095,7 +1113,7 @@
                     <span class="enemy-name">{{
                       combat.targetRoleInfo?.name || "未知玩家"
                     }}</span>
-                    <n-tag
+                    <NTag
                       size="tiny"
                       :bordered="false"
                       type="info"
@@ -1103,7 +1121,7 @@
                       v-if="combat.targetRoleInfo?.legionName"
                     >
                       {{ combat.targetRoleInfo.legionName }}
-                    </n-tag>
+                    </NTag>
                     <span
                       class="enemy-power"
                       v-if="combat.targetRoleInfo?.power"
@@ -1112,14 +1130,14 @@
                     </span>
                   </div>
                   <div class="combat-right">
-                    <n-tag
+                    <NTag
                       size="small"
                       :type="combat.winFlag ? 'success' : 'error'"
                       strong
                       round
                     >
                       {{ combat.winFlag ? "攻击成功" : "攻击失败" }}
-                    </n-tag>
+                    </NTag>
                   </div>
                 </div>
               </div>
@@ -1168,17 +1186,17 @@
               >
                 <div
                   v-for="(combat, cIdx) in targetPlayerDefenseList"
-                  :key="'defense-' + cIdx"
+                  :key="`defense-${cIdx}`"
                   class="combat-item"
                   :class="combat.winFlag ? 'combat-win' : 'combat-loss'"
                 >
                   <div class="combat-left">
-                    <n-tag
+                    <NTag
                       size="tiny"
                       round
                       type="warning"
                       class="combat-type-tag"
-                      >遭遇防守</n-tag
+                      >遭遇防守</NTag
                     >
                     <span class="combat-time">{{
                       formatCombatTime(combat.timestamp)
@@ -1190,7 +1208,7 @@
                         ? "交战对手:"
                         : "敌方来袭对手:"
                     }}</span>
-                    <n-avatar
+                    <NAvatar
                       round
                       :size="24"
                       :src="
@@ -1201,7 +1219,7 @@
                     <span class="enemy-name">{{
                       combat.targetRoleInfo?.name || "未知玩家"
                     }}</span>
-                    <n-tag
+                    <NTag
                       size="tiny"
                       :bordered="false"
                       type="warning"
@@ -1209,7 +1227,7 @@
                       v-if="combat.targetRoleInfo?.legionName"
                     >
                       {{ combat.targetRoleInfo.legionName }}
-                    </n-tag>
+                    </NTag>
                     <span
                       class="enemy-power"
                       v-if="combat.targetRoleInfo?.power"
@@ -1218,14 +1236,14 @@
                     </span>
                   </div>
                   <div class="combat-right">
-                    <n-tag
+                    <NTag
                       size="small"
                       :type="combat.winFlag ? 'success' : 'error'"
                       strong
                       round
                     >
                       {{ combat.winFlag ? "防守成功" : "防守失败" }}
-                    </n-tag>
+                    </NTag>
                   </div>
                 </div>
               </div>
@@ -1247,37 +1265,27 @@
  * 通过 role_gettargetteam 获取成员在营地挑战中真实生效的 1~5 号站位布阵阵容。
  */
 
-import { copyText } from "@/utils/fileRelay";
-import { computed, h, onMounted, ref, watch } from "vue";
 import {
-  useMessage,
-  NTag,
-  NAvatar,
-  NButton,
-  NInputNumber,
-  NSelect,
-} from "naive-ui";
-import {
-  RefreshOutline,
-  CheckmarkCircleOutline,
-  ShieldOutline,
-  CopyOutline,
   CalendarOutline,
+  CopyOutline,
   FlameOutline,
-  TrophyOutline,
+  RefreshOutline,
+  ShieldOutline,
   StatsChartOutline,
+  TrophyOutline,
 } from "@vicons/ionicons5";
 import html2canvas from "html2canvas";
+import { NAvatar, NButton, NSelect, NTag, useMessage } from "naive-ui";
+import { computed, h, onMounted, ref, watch } from "vue";
+import { copyText } from "@/utils/fileRelay";
 import { useTokenStore } from "@/stores/tokenStore";
 import {
-  HERO_DICT,
-  HeroFillInfo,
-  legacycolor,
-  getLineupType,
-  LINEUP_RULES,
   formatWeapon,
+  getLineupType,
+  HERO_DICT,
+  legacycolor,
+  LINEUP_RULES,
 } from "@/utils/HeroList";
-import { getLastSaturday } from "@/utils/clubBattleUtils";
 
 /**
  * 格式化战力数值为可读的字符串（如 1.23亿、45.6万）
@@ -1287,13 +1295,13 @@ import { getLastSaturday } from "@/utils/clubBattleUtils";
  */
 const formatPower = (val: number | string | undefined | null) => {
   if (!val) return "0";
-  const num = typeof val === "string" ? parseFloat(val) : val;
-  if (isNaN(num)) return "0";
+  const num = typeof val === "string" ? Number.parseFloat(val) : val;
+  if (Number.isNaN(+num)) return "0";
   if (num >= 100000000) {
-    return (num / 100000000).toFixed(2) + "亿";
+    return `${(num / 100000000).toFixed(2)}亿`;
   }
   if (num >= 10000) {
-    return (num / 10000).toFixed(1) + "万";
+    return `${(num / 10000).toFixed(1)}万`;
   }
   return num.toLocaleString();
 };
@@ -1419,8 +1427,8 @@ const targetPlayerOffenseList = computed(() => playerAttackRecords.value);
 const targetPlayerOffenseWinCount = computed(
   () =>
     targetPlayerOffenseList.value.filter(
-      (c) => c.winFlag === true || c.winFlag === 1
-    ).length
+      (c) => c.winFlag === true || c.winFlag === 1,
+    ).length,
 );
 
 /**
@@ -1429,8 +1437,8 @@ const targetPlayerOffenseWinCount = computed(
 const targetPlayerOffenseLossCount = computed(
   () =>
     targetPlayerOffenseList.value.filter(
-      (c) => c.winFlag === false || c.winFlag === 0
-    ).length
+      (c) => c.winFlag === false || c.winFlag === 0,
+    ).length,
 );
 
 /**
@@ -1453,8 +1461,8 @@ const targetPlayerDefenseList = computed(() => playerDefenseRecords.value);
 const targetPlayerDefenseWinCount = computed(
   () =>
     targetPlayerDefenseList.value.filter(
-      (c) => c.winFlag === true || c.winFlag === 1
-    ).length
+      (c) => c.winFlag === true || c.winFlag === 1,
+    ).length,
 );
 
 /**
@@ -1463,8 +1471,8 @@ const targetPlayerDefenseWinCount = computed(
 const targetPlayerDefenseLossCount = computed(
   () =>
     targetPlayerDefenseList.value.filter(
-      (c) => c.winFlag === false || c.winFlag === 0
-    ).length
+      (c) => c.winFlag === false || c.winFlag === 0,
+    ).length,
 );
 
 /**
@@ -1488,7 +1496,7 @@ const formatCombatTime = (timestamp: number | undefined | null) => {
   const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
-    d.getHours()
+    d.getHours(),
   )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 };
 
@@ -1550,15 +1558,15 @@ const weeklyStats = computed(() => {
   let cycleRange = "周更新周期";
   const phaseDates: string[] = [];
   if (phaseStr.length === 6) {
-    const y = 2000 + parseInt(phaseStr.slice(0, 2), 10);
-    const m = parseInt(phaseStr.slice(2, 4), 10) - 1;
-    const d = parseInt(phaseStr.slice(4, 6), 10);
+    const y = 2000 + Number.parseInt(phaseStr.slice(0, 2), 10);
+    const m = Number.parseInt(phaseStr.slice(2, 4), 10) - 1;
+    const d = Number.parseInt(phaseStr.slice(4, 6), 10);
     const monDate = new Date(y, m, d);
     const sunDate = new Date(y, m, d + 6);
     const fmt = (dt: Date) =>
       `${dt.getFullYear()}/${String(dt.getMonth() + 1).padStart(
         2,
-        "0"
+        "0",
       )}/${String(dt.getDate()).padStart(2, "0")}`;
     cycleRange = `${fmt(monDate)} ~ ${fmt(sunDate)}`;
 
@@ -1567,7 +1575,7 @@ const weeklyStats = computed(() => {
       const offset = item.day >= 1 ? item.day - 1 : item.day + 6;
       const matchDt = new Date(y, m, d + offset);
       const k = `${String(matchDt.getFullYear()).slice(-2)}${String(
-        matchDt.getMonth() + 1
+        matchDt.getMonth() + 1,
       ).padStart(2, "0")}${String(matchDt.getDate()).padStart(2, "0")}`;
       phaseDates.push(k);
     }
@@ -1611,7 +1619,7 @@ const weeklyStats = computed(() => {
   // 个人今日统计
   const now = new Date();
   const todayKey = `${String(now.getFullYear()).slice(-2)}${String(
-    now.getMonth() + 1
+    now.getMonth() + 1,
   ).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
   const todayData = attackMap[todayKey] || {};
   const todayAttackCnt = todayData.attackCnt || 0;
@@ -1680,7 +1688,7 @@ const displayMapList = computed(() => {
 const mapStats = computed(() => {
   const total = currentMemberList.value.length || 30;
   const defeatedCount = currentMemberList.value.filter(
-    (m) => m.defeated
+    (m) => m.defeated,
   ).length;
   const aliveCount = Math.max(0, total - defeatedCount);
   const defeatedRate =
@@ -1690,19 +1698,10 @@ const mapStats = computed(() => {
 
 // 我方防守状态统计
 const ownDefendDefeatedCount = computed(
-  () => ownMembers.value.filter((m) => m.defeated).length
-);
-const ownDefendAliveCount = computed(() =>
-  Math.max(0, ownMembers.value.length - ownDefendDefeatedCount.value)
+  () => ownMembers.value.filter((m) => m.defeated).length,
 );
 
 // 敌方防守状态统计
-const oppDefendDefeatedCount = computed(
-  () => opponentMembers.value.filter((m) => m.defeated).length
-);
-const oppDefendAliveCount = computed(() =>
-  Math.max(0, opponentMembers.value.length - oppDefendDefeatedCount.value)
-);
 
 // 敌方今日得分
 const currentOppoDayScore = computed(() => {
@@ -1719,7 +1718,7 @@ const attendanceStats = computed(() => {
   const unattacked = members.filter((m: any) => (m.realAttackCnt || 0) === 0);
   // 2. 未打满 (真实出刀 1~2 次，仍有剩余免费挑战机会，不论打输打赢)
   const incomplete = members.filter(
-    (m: any) => (m.realAttackCnt || 0) > 0 && (m.realAttackCnt || 0) < 3
+    (m: any) => (m.realAttackCnt || 0) > 0 && (m.realAttackCnt || 0) < 3,
   );
   // 3. 已打满 / 战意高昂 (出战 >= 3 次，打满免费机会或买刀，即使打输也是打满)
   const completed = members.filter((m: any) => (m.realAttackCnt || 0) >= 3);
@@ -1761,7 +1760,7 @@ const copyUnattackedList = () => {
   const text = `【营地挑战今日催刀提醒（0刀未动）】\n截至目前，我方 0 刀未动成员（共${unattacked.length}人）：\n${names}\n请以上成员尽快上线使用免费挑战次数，为俱乐部争夺排位积分！`;
   copyToClipboard(
     text,
-    `未动刀催刀名单已复制到剪贴板（共${unattacked.length}人）！`
+    `未动刀催刀名单已复制到剪贴板（共${unattacked.length}人）！`,
   );
 };
 
@@ -1777,13 +1776,13 @@ const copyIncompleteList = () => {
       (m: any) =>
         `${m.name}(已出战${m.realAttackCnt || 0}/3次，剩${
           3 - (m.realAttackCnt || 0)
-        }次)`
+        }次)`,
     )
     .join("、");
   const text = `【营地挑战今日补刀提醒（未打满 3 刀）】\n截至目前，我方未打满免费次数成员（共${incomplete.length}人）：\n${details}\n请以上成员及时上线补满挑战次数，助力俱乐部积分登顶！`;
   copyToClipboard(
     text,
-    `未打满补刀名单已复制到剪贴板（共${incomplete.length}人）！`
+    `未打满补刀名单已复制到剪贴板（共${incomplete.length}人）！`,
   );
 };
 
@@ -1817,7 +1816,7 @@ const weeklyRosterRanked = computed(() => {
 const createRosterComparator =
   (
     sortBy: "score" | "attackWinRate" | "defWinRate",
-    scoreKey: "score" | "todayScore" = "score"
+    scoreKey: "score" | "todayScore" = "score",
   ) =>
   (a: any, b: any): number => {
     if (sortBy === "score") {
@@ -1904,7 +1903,7 @@ const todayTableColumns = [
       h(
         NTag,
         { size: "small", type: "info", round: true, bordered: false },
-        { default: () => `#${row.slot || 1} 据点` }
+        { default: () => `#${row.slot || 1} 据点` },
       ),
   },
   {
@@ -1941,10 +1940,10 @@ const todayTableColumns = [
             ? h(
                 NTag,
                 { size: "tiny", type: "warning", round: true, bordered: false },
-                { default: () => "镜像" }
+                { default: () => "镜像" },
               )
             : null,
-        ]
+        ],
       ),
   },
   {
@@ -1956,7 +1955,7 @@ const todayTableColumns = [
       h(
         "span",
         { style: { fontWeight: "600", color: "#fa8c16" } },
-        formatPower(row.power)
+        formatPower(row.power),
       ),
   },
   {
@@ -1974,7 +1973,7 @@ const todayTableColumns = [
             fontSize: "14px",
           },
         },
-        row.todayScore > 0 ? `+${row.todayScore}分` : "0分"
+        row.todayScore > 0 ? `+${row.todayScore}分` : "0分",
       ),
   },
   {
@@ -1987,12 +1986,12 @@ const todayTableColumns = [
         ? h(
             NTag,
             { size: "small", type: "error", round: true },
-            { default: () => "💥 已被攻破" }
+            { default: () => "💥 已被攻破" },
           )
         : h(
             NTag,
             { size: "small", type: "success", round: true },
-            { default: () => "🛡️ 坚守中" }
+            { default: () => "🛡️ 坚守中" },
           ),
   },
   {
@@ -2006,7 +2005,7 @@ const todayTableColumns = [
         { style: { fontSize: "12px", color: "#64748b" } },
         `遭遇 ${row.challengeCnt || 0} 次 / 守住 ${row.defWins || 0} 次 (胜率 ${
           row.defWinRate || "—"
-        })`
+        })`,
       ),
   },
   {
@@ -2020,27 +2019,27 @@ const todayTableColumns = [
         return h(
           NTag,
           { size: "small", type: "error", bordered: false },
-          { default: () => "0/3 未出战" }
+          { default: () => "0/3 未出战" },
         );
       }
       if (cnt < 3) {
         return h(
           NTag,
           { size: "small", type: "warning", bordered: false },
-          { default: () => `${cnt}/3 未打满` }
+          { default: () => `${cnt}/3 未打满` },
         );
       }
       if (cnt === 3) {
         return h(
           NTag,
           { size: "small", type: "success", bordered: false },
-          { default: () => "3/3 已打满" }
+          { default: () => "3/3 已打满" },
         );
       }
       return h(
         NTag,
         { size: "small", type: "info", bordered: false },
-        { default: () => `${cnt}次 (满战)` }
+        { default: () => `${cnt}次 (满战)` },
       );
     },
   },
@@ -2062,13 +2061,13 @@ const todayTableColumns = [
           },
           `${row.attackWins || 0}胜 / ${row.attackLosses || 0}负 (胜率 ${
             row.attackWinRate || "—"
-          })`
+          })`,
         );
       }
       return h(
         "span",
         { style: { color: "#94a3b8", fontSize: "12px" } },
-        "0刀"
+        "0刀",
       );
     },
   },
@@ -2081,7 +2080,7 @@ const todayTableColumns = [
       h(
         NButton,
         { size: "tiny", type: "primary", onClick: () => openDuelModal(row) },
-        { default: () => "战报流水" }
+        { default: () => "战报流水" },
       ),
   },
 ];
@@ -2099,14 +2098,14 @@ const weeklyRosterColumns = [
         rank === 1
           ? "warning"
           : rank === 2
-          ? "info"
-          : rank === 3
-          ? "success"
-          : "default";
+            ? "info"
+            : rank === 3
+              ? "success"
+              : "default";
       return h(
         NTag,
         { size: "small", type, round: true },
-        { default: () => `第 ${rank} 名` }
+        { default: () => `第 ${rank} 名` },
       );
     },
   },
@@ -2119,7 +2118,7 @@ const weeklyRosterColumns = [
       h(
         "span",
         { style: { color: "#64748b", fontWeight: "600" } },
-        `#${row.slot || 1} 据点`
+        `#${row.slot || 1} 据点`,
       ),
   },
   {
@@ -2156,10 +2155,10 @@ const weeklyRosterColumns = [
             ? h(
                 NTag,
                 { size: "tiny", type: "warning", round: true, bordered: false },
-                { default: () => "镜像" }
+                { default: () => "镜像" },
               )
             : null,
-        ]
+        ],
       ),
   },
   {
@@ -2171,7 +2170,7 @@ const weeklyRosterColumns = [
       h(
         "span",
         { style: { fontWeight: "600", color: "#fa8c16" } },
-        formatPower(row.power)
+        formatPower(row.power),
       ),
   },
   {
@@ -2183,7 +2182,7 @@ const weeklyRosterColumns = [
       h(
         "span",
         { style: { color: "#ff4d4f", fontWeight: "700" } },
-        row.redQuench || 0
+        row.redQuench || 0,
       ),
   },
   {
@@ -2202,7 +2201,7 @@ const weeklyRosterColumns = [
             fontSize: "14px",
           },
         },
-        `${row.score || 0}分`
+        `${row.score || 0}分`,
       ),
   },
   {
@@ -2221,7 +2220,7 @@ const weeklyRosterColumns = [
       h(
         "span",
         { style: { color: "#10b981", fontWeight: "600" } },
-        `${row.defWins || 0}次`
+        `${row.defWins || 0}次`,
       ),
   },
   {
@@ -2237,10 +2236,11 @@ const weeklyRosterColumns = [
         {
           style: {
             fontWeight: "700",
-            color: parseFloat(row.defWinRate) >= 50 ? "#10b981" : "#f59e0b",
+            color:
+              Number.parseFloat(row.defWinRate) >= 50 ? "#10b981" : "#f59e0b",
           },
         },
-        row.defWinRate
+        row.defWinRate,
       ),
   },
   {
@@ -2252,7 +2252,7 @@ const weeklyRosterColumns = [
       h(
         NButton,
         { size: "tiny", type: "primary", onClick: () => openDuelModal(row) },
-        { default: () => "对战详情" }
+        { default: () => "对战详情" },
       ),
   },
 ];
@@ -2262,13 +2262,13 @@ const weeklyRosterColumns = [
  *
  * @param {string} tokenId 当前账号 Token ID
  * @param {number} roleId 目标成员 Role ID
- * @param {Object} [baseInfo={}] 目标成员基础信息
- * @returns {Promise<Object>} 包含 1~5 号站位武将真实数据的成员对象
+ * @param {object} [baseInfo] 目标成员基础信息
+ * @returns {Promise<object>} 包含 1~5 号站位武将真实数据的成员对象
  */
 const fetchMemberRealLineup = async (
   tokenId: string,
   roleId: number,
-  baseInfo: any = {}
+  baseInfo: any = {},
 ) => {
   try {
     // 1. 优先调用 club_gettargetteam 获取营地挑战专属布阵阵容 (0..4 站位)
@@ -2278,14 +2278,14 @@ const fetchMemberRealLineup = async (
         tokenId,
         "club_gettargetteam",
         { targetId: roleId },
-        4000
+        4000,
       );
     } catch (e) {
       targetTeamRes = await tokenStore.sendMessageWithPromise(
         tokenId,
         "role_gettargetteam",
         { targetId: roleId },
-        4000
+        4000,
       );
     }
 
@@ -2299,7 +2299,7 @@ const fetchMemberRealLineup = async (
 
     if (battleTeam) {
       const slotKeys = Object.keys(battleTeam).sort(
-        (a, b) => Number(a) - Number(b)
+        (a, b) => Number(a) - Number(b),
       );
       for (const slotKey of slotKeys) {
         const slotData = battleTeam[slotKey];
@@ -2341,7 +2341,7 @@ const fetchMemberRealLineup = async (
       redQuench: totalRedCount,
       toyName:
         formatWeapon(
-          role?.weaponId || role?.lordWeaponId || baseInfo?.toyName
+          role?.weaponId || role?.lordWeaponId || baseInfo?.toyName,
         ) || "",
       petId: role?.petId || baseInfo?.petId || 0,
       legionName: role?.legionName || baseInfo?.legionName || "",
@@ -2380,13 +2380,13 @@ const fetchMemberRealLineup = async (
  *
  * @param {string} tokenId 当前账号 Token ID
  * @param {Array<{ id: number; base: any }>} items 成员 ID 与基础属性列表
- * @param {number} [chunkSize=5] 分批大小
- * @returns {Promise<Array<Object>>} 已解析的成员列表
+ * @param {number} [chunkSize] 分批大小
+ * @returns {Promise<Array<object>>} 已解析的成员列表
  */
 const fetchMembersInChunks = async (
   tokenId: string,
   items: { id: number; base: any }[],
-  chunkSize = 5
+  chunkSize = 5,
 ) => {
   const results: any[] = [];
   const total = items.length;
@@ -2394,7 +2394,7 @@ const fetchMembersInChunks = async (
     const chunk = items.slice(i, i + chunkSize);
     progressText.value = `${Math.min(i + chunkSize, total)}/${total}`;
     const chunkResults = await Promise.all(
-      chunk.map((it) => fetchMemberRealLineup(tokenId, it.id, it.base))
+      chunk.map((it) => fetchMemberRealLineup(tokenId, it.id, it.base)),
     );
     results.push(...chunkResults);
   }
@@ -2419,7 +2419,7 @@ const fetchCampChallengeData = async () => {
       tokenId,
       "legion_getinfo",
       {},
-      5000
+      5000,
     );
     const ownClubData =
       ownClubRes?.info || ownClubRes?.legionData || ownClubRes || {};
@@ -2430,7 +2430,7 @@ const fetchCampChallengeData = async () => {
       tokenId,
       "club_getinfo",
       {},
-      8000
+      8000,
     );
     const clubData = clubInfoRes?.club || {};
     rawClubData.value = clubData;
@@ -2442,7 +2442,7 @@ const fetchCampChallengeData = async () => {
     if (clubData.oppoMap) {
       for (const [dayKey, oppo] of Object.entries(clubData.oppoMap) as [
         string,
-        any
+        any,
       ][]) {
         const dayNum = Number(dayKey);
         days.push({
@@ -2503,7 +2503,7 @@ const fetchCampChallengeData = async () => {
     // 6. 构建敌我双方 30 名成员基础列表 (保留 slot 据点编号、镜像标记与受击数据)
     const oppDefendersEntries = Object.entries(currentOppo.defenders || {}) as [
       string,
-      any
+      any,
     ][];
     opponentMembers.value = oppDefendersEntries.map(
       ([slotKey, d]: [string, any], idx: number) => ({
@@ -2524,12 +2524,12 @@ const fetchCampChallengeData = async () => {
         toyName: "",
         petId: d.petId || 0,
         legionName: displayOppName,
-      })
+      }),
     );
 
     const ownMembersEntries = Object.entries(clubData.members || {}) as [
       string,
-      any
+      any,
     ][];
     ownMembers.value = ownMembersEntries.map(
       ([slotKey, m]: [string, any], idx: number) => ({
@@ -2550,7 +2550,7 @@ const fetchCampChallengeData = async () => {
         toyName: "",
         petId: m.petId || 0,
         legionName: ownClubData.name || "我方俱乐部",
-      })
+      }),
     );
 
     selectedSide.value = "own";
@@ -2560,12 +2560,12 @@ const fetchCampChallengeData = async () => {
     if (opponentMembers.value.length > 0) {
       const oppDetailed = await fetchMembersInChunks(
         tokenId,
-        opponentMembers.value.map((o) => ({ id: o.id, base: o }))
+        opponentMembers.value.map((o) => ({ id: o.id, base: o })),
       );
       opponentMembers.value = oppDetailed;
       const totalOppRed = oppDetailed.reduce(
         (s, m) => s + (m.redQuench || 0),
-        0
+        0,
       );
       const totalOppPower = oppDetailed.reduce((s, m) => s + (m.power || 0), 0);
       battleInfo.value.opponentClub.quenchNum = totalOppRed;
@@ -2577,12 +2577,12 @@ const fetchCampChallengeData = async () => {
     if (ownMembers.value.length > 0) {
       const ownDetailed = await fetchMembersInChunks(
         tokenId,
-        ownMembers.value.map((o) => ({ id: o.id, base: o }))
+        ownMembers.value.map((o) => ({ id: o.id, base: o })),
       );
       ownMembers.value = ownDetailed;
       const totalOwnRed = ownDetailed.reduce(
         (s, m) => s + (m.redQuench || 0),
-        0
+        0,
       );
       const totalOwnPower = ownDetailed.reduce((s, m) => s + (m.power || 0), 0);
       battleInfo.value.ownClub.quenchNum = totalOwnRed;
@@ -2597,7 +2597,7 @@ const fetchCampChallengeData = async () => {
         tokenId,
         "club_getattackrecord",
         {},
-        5000
+        5000,
       );
       if (Array.isArray(atkRes?.records)) {
         cachedAttackRecords.value = atkRes.records;
@@ -2612,7 +2612,7 @@ const fetchCampChallengeData = async () => {
         tokenId,
         "club_getgrouprank",
         {},
-        5000
+        5000,
       );
       if (Array.isArray(grpRes?.rankList)) {
         groupRankData.value = grpRes.rankList;
@@ -2646,19 +2646,19 @@ const fetchCampChallengeData = async () => {
  * @returns {{startMs: number, endMs: number} | null} 当日毫秒时间窗口；phase 缺失时返回 null（不过滤）
  */
 const getMatchDayRange = (
-  day: number
+  day: number,
 ): { startMs: number; endMs: number } | null => {
   const phaseStr = String(rawClubData.value?.phase || "");
   if (phaseStr.length !== 6) return null;
-  const y = 2000 + parseInt(phaseStr.slice(0, 2), 10);
-  const m = parseInt(phaseStr.slice(2, 4), 10) - 1;
-  const d = parseInt(phaseStr.slice(4, 6), 10);
+  const y = 2000 + Number.parseInt(phaseStr.slice(0, 2), 10);
+  const m = Number.parseInt(phaseStr.slice(2, 4), 10) - 1;
+  const d = Number.parseInt(phaseStr.slice(4, 6), 10);
   const offset = day >= 1 ? day - 1 : day + 6; // 周一为周期起点，周日跨到周末尾
   const matchDt = new Date(y, m, d + offset);
   const startMs = new Date(
     matchDt.getFullYear(),
     matchDt.getMonth(),
-    matchDt.getDate()
+    matchDt.getDate(),
   ).getTime();
   return { startMs, endMs: startMs + 24 * 60 * 60 * 1000 };
 };
@@ -2743,7 +2743,7 @@ const aggregateAllMemberAttacks = async (tokenId: string, day: number) => {
           tokenId,
           "club_getdefenserecord",
           { targetId: d.roleId, targetIsMirror: !!d.mirror },
-          5000
+          5000,
         );
         if (Array.isArray(defRes?.records)) {
           for (const r of defRes.records) {
@@ -2796,7 +2796,7 @@ const aggregateAllMemberAttacks = async (tokenId: string, day: number) => {
       } catch (e) {
         // 忽略单据点拉取失败
       }
-    })
+    }),
   );
 
   // 2. 并发拉取我方防守据点战报
@@ -2808,7 +2808,7 @@ const aggregateAllMemberAttacks = async (tokenId: string, day: number) => {
           tokenId,
           "club_getdefenserecord",
           { targetId: m.id || m.roleId, targetIsMirror: !!m.mirror },
-          5000
+          5000,
         );
         if (Array.isArray(defRes?.records)) {
           const list: any[] = [];
@@ -2867,7 +2867,7 @@ const aggregateAllMemberAttacks = async (tokenId: string, day: number) => {
           // 计算当周防守胜率并写入周统计
           w.defWinRate =
             w.challengeCnt > 0
-              ? ((w.defWins / w.challengeCnt) * 100).toFixed(1) + "%"
+              ? `${((w.defWins / w.challengeCnt) * 100).toFixed(1)}%`
               : "—";
           w.defWinRateNum =
             w.challengeCnt > 0 ? (w.defWins / w.challengeCnt) * 100 : -1;
@@ -2879,7 +2879,7 @@ const aggregateAllMemberAttacks = async (tokenId: string, day: number) => {
       } catch (e) {
         // 忽略单据点拉取失败
       }
-    })
+    }),
   );
 
   await Promise.all([oppDefPromise, ourDefPromise]);
@@ -2954,7 +2954,7 @@ const aggregateAllMemberAttacks = async (tokenId: string, day: number) => {
 const todayBattleStarted = computed(() => {
   const now = new Date();
   const todayKey = `${String(now.getFullYear()).slice(-2)}${String(
-    now.getMonth() + 1
+    now.getMonth() + 1,
   ).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`;
   if ((rawSiegeData.value?.attackMap?.[todayKey]?.attackCnt || 0) > 0) {
     return true;
@@ -2984,7 +2984,7 @@ const injectAttackStatsIntoOwnMembers = () => {
     const attackWinRateNum =
       realAttackCnt > 0 ? (attackWins / realAttackCnt) * 100 : -1;
     const attackWinRate =
-      realAttackCnt > 0 ? attackWinRateNum.toFixed(1) + "%" : "—";
+      realAttackCnt > 0 ? `${attackWinRateNum.toFixed(1)}%` : "—";
 
     // 判定成员出战状态与出刀次数文本
     let attackStatusText = "0/3 未出战";
@@ -3011,7 +3011,7 @@ const injectAttackStatsIntoOwnMembers = () => {
     const defLosses = Math.max(0, challengeCnt - defWins);
     const defWinRateNum =
       challengeCnt > 0 ? (defWins / challengeCnt) * 100 : -1;
-    const defWinRate = challengeCnt > 0 ? defWinRateNum.toFixed(1) + "%" : "—";
+    const defWinRate = challengeCnt > 0 ? `${defWinRateNum.toFixed(1)}%` : "—";
 
     // 3. 今日未开战时将今日战功归 0，开战后读取各自据点的 score
     const todayScore = todayBattleStarted.value ? m.score || 0 : 0;
@@ -3059,7 +3059,7 @@ const handleMatchDayChange = async (day: number) => {
       tokenId,
       "club_getinfo",
       {},
-      8000
+      8000,
     );
     if (currentFetchToken !== fetchId || selectedMatchDay.value !== day) return;
     const clubData = clubInfoRes?.club || {};
@@ -3082,7 +3082,7 @@ const handleMatchDayChange = async (day: number) => {
     // 2. 实时重建对手据点列表
     const oppDefendersEntries = Object.entries(oppo.defenders || {}) as [
       string,
-      any
+      any,
     ][];
     const initialMembers = oppDefendersEntries.map(
       ([slotKey, d]: [string, any], idx: number) => ({
@@ -3103,7 +3103,7 @@ const handleMatchDayChange = async (day: number) => {
         toyName: "",
         petId: d.petId || 0,
         legionName: oppo.name,
-      })
+      }),
     );
     const oppClubObj = {
       id: oppo.legionId || "未知",
@@ -3122,7 +3122,7 @@ const handleMatchDayChange = async (day: number) => {
     if (initialMembers.length > 0) {
       const detailed = await fetchMembersInChunks(
         tokenId,
-        initialMembers.map((o) => ({ id: o.id, base: o }))
+        initialMembers.map((o) => ({ id: o.id, base: o })),
       );
       if (currentFetchToken !== fetchId || selectedMatchDay.value !== day)
         return;
@@ -3147,7 +3147,7 @@ const handleMatchDayChange = async (day: number) => {
 /**
  * 呼出成员对战战报流水对话框
  *
- * @param {Object} player 目标玩家对象
+ * @param {object} player 目标玩家对象
  */
 const openDuelModal = async (player: any) => {
   targetPlayer.value = player;
@@ -3169,12 +3169,12 @@ const openDuelModal = async (player: any) => {
         tokenId,
         "club_getdefenserecord",
         { targetId: player.id, targetIsMirror: !!player.mirror },
-        5000
+        5000,
       );
       if (Array.isArray(defRes?.records)) {
         playerDefenseRecords.value = defRes.records
           .filter((r: any) =>
-            isRecordInMatchDay(r.created, selectedMatchDay.value)
+            isRecordInMatchDay(r.created, selectedMatchDay.value),
           )
           .map((r: any) => ({
             attackType: 0,
@@ -3212,7 +3212,7 @@ const openDuelModal = async (player: any) => {
         ) {
           playerAttackRecords.value = cachedAttackRecords.value
             .filter((r: any) =>
-              isRecordInMatchDay(r.created, selectedMatchDay.value)
+              isRecordInMatchDay(r.created, selectedMatchDay.value),
             )
             .map((r: any) => ({
               attackType: 1,
@@ -3248,12 +3248,12 @@ const openDuelModal = async (player: any) => {
           tokenId,
           "club_getdefenserecord",
           { targetId: player.id, targetIsMirror: !!player.mirror },
-          5000
+          5000,
         );
         if (Array.isArray(defRes?.records)) {
           playerDefenseRecords.value = defRes.records
             .filter((r: any) =>
-              isRecordInMatchDay(r.created, selectedMatchDay.value)
+              isRecordInMatchDay(r.created, selectedMatchDay.value),
             )
             .map((r: any) => ({
               attackType: 0,
@@ -3307,7 +3307,7 @@ const handleExportImage = async () => {
     link.click();
     message.success("长图导出成功！");
   } catch (err: any) {
-    message.error("导出长图失败: " + err.message);
+    message.error(`导出长图失败: ${err.message}`);
   } finally {
     exporting.value = false;
   }
@@ -3353,7 +3353,7 @@ const columns = [
           style: { cursor: "pointer", color: "#1890ff", fontWeight: "600" },
           onClick: () => openDuelModal(row),
         },
-        row.name
+        row.name,
       ),
   },
   {
@@ -3365,7 +3365,7 @@ const columns = [
       h(
         "span",
         { style: { fontWeight: "600", color: "#fa8c16" } },
-        formatPower(row.power)
+        formatPower(row.power),
       ),
   },
   {
@@ -3377,7 +3377,7 @@ const columns = [
       h(
         "span",
         { style: { color: "#ff4d4f", fontWeight: "700" } },
-        row.redQuench
+        row.redQuench,
       ),
   },
   {
@@ -3395,7 +3395,7 @@ const columns = [
           bordered: false,
           color: { color: cfg.value, textColor: "#fff" },
         },
-        { default: () => cfg.name }
+        { default: () => cfg.name },
       );
     },
   },
@@ -3440,7 +3440,7 @@ const columns = [
             { class: "hero-card-pearl" },
             pearlParts.length
               ? pearlParts
-              : h("span", { class: "text-muted" }, "专属鱼灵")
+              : h("span", { class: "text-muted" }, "专属鱼灵"),
           ),
         ]);
       });
@@ -3463,7 +3463,7 @@ const columns = [
       return h(
         NTag,
         { size: "small", bordered: false, color: colorProps },
-        { default: () => type }
+        { default: () => type },
       );
     },
   },
@@ -3476,7 +3476,7 @@ const columns = [
       h(
         NButton,
         { size: "tiny", type: "primary", onClick: () => openDuelModal(row) },
-        { default: () => "对战详情" }
+        { default: () => "对战详情" },
       ),
   },
 ];
@@ -3486,7 +3486,7 @@ watch(
   () => tokenStore.selectedToken?.id,
   (newId) => {
     if (newId) fetchCampChallengeData();
-  }
+  },
 );
 
 onMounted(() => {

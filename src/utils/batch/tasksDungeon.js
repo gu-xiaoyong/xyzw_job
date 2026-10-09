@@ -1,4 +1,4 @@
-import { isDungeonOpen, merchantConfig, goldItemsConfig } from "@/utils/dreamConstants";
+import { isDungeonOpen, merchantConfig } from "@/utils/dreamConstants";
 
 /**
  * 梦境类任务

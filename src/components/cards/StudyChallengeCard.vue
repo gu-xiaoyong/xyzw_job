@@ -21,28 +21,30 @@
         🎯 一键答题.
       </a-button>
       <a-button
-        v-if="!study.thisWeek && study.status == 'starting'"
+        v-if="!study.thisWeek && isSameGameValue(study.status, 'starting')"
         status="warning"
         :disabled="true"
       >
         正在获取题库...
       </a-button>
       <a-button
-        v-if="!study.thisWeek && study.status == 'answering'"
+        v-if="!study.thisWeek && isSameGameValue(study.status, 'answering')"
         status="warning"
         :disabled="true"
       >
         答题中...
       </a-button>
       <a-button
-        v-if="!study.thisWeek && study.status == 'claiming_rewards'"
+        v-if="
+          !study.thisWeek && isSameGameValue(study.status, 'claiming_rewards')
+        "
         status="warning"
         :disabled="true"
       >
         正在领取奖励...
       </a-button>
       <a-button
-        v-if="!study.thisWeek && study.status == 'completed'"
+        v-if="!study.thisWeek && isSameGameValue(study.status, 'completed')"
         status="warning"
         :disabled="true"
       >
@@ -63,6 +65,7 @@ import {
   getQuestionCount,
 } from "@/utils/studyQuestionsFromJSON.js";
 import { useTokenStore } from "@/stores/tokenStore";
+import { isSameGameValue } from "@/utils/gameValue.js";
 import MyCard from "../Common/MyCard.vue";
 
 const tokenStore = useTokenStore();
@@ -88,7 +91,11 @@ watch(
 
 const startStudy = async () => {
   if (!tokenStore.selectedToken || study.value.thisWeek) return;
-  if (study.value.status != "" && study.value.status != "idel") return;
+  if (
+    !isSameGameValue(study.value.status, "") &&
+    !isSameGameValue(study.value.status, "idel")
+  )
+    return;
 
   study.value.status = "starting";
   await preloadQuestions();

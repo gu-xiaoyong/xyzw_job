@@ -60,20 +60,21 @@ const sendApex = (action, task, maxRetry, scope) =>
  * （例：第 5 期报名中、第 4 期淘汰赛已开押）。期号与阶段全部由配置推导。
  *
  * @param {number} nowMs 服务端时间
- * @returns {{season: number, round: number, tabs: Array}|null} 无开放场次时为 null
+ * @returns {Array<{season: number, round: number, tabs: Array}>} 所有开放期次；无开放场次时为空数组
  */
 const resolveOpenGuesses = (nowMs) => {
   const season = getCurrentSeason(nowMs);
-  if (season <= 0) return null;
+  if (season <= 0) return [];
+  const openRounds = [];
   for (const round of getCurrentRounds(season, nowMs)) {
     const tabs = getGuessTabs(round, season, nowMs).filter(
       (t) =>
         t.state === ApexScheduleStatus.Unlocked ||
         t.state === ApexScheduleStatus.Locked,
     );
-    if (tabs.length) return { season, round, tabs };
+    if (tabs.length) openRounds.push({ season, round, tabs });
   }
-  return null;
+  return openRounds;
 };
 
 /**
@@ -152,11 +153,11 @@ export function createTasksApex(deps) {
         const apexInfo = roleResp?.apexRoleInfo || {};
         const guessMap = apexInfo.guessMap || {};
 
-        // 2. 依据真实规则解析当前开放的竞猜阶段
-        const open = resolveOpenGuesses(
+        // 2. 依据真实规则解析当前开放的竞猜阶段（所有开放期次，逐一遍历）
+        const openRounds = resolveOpenGuesses(
           calibrateServerTime(Date.now(), apexInfo.resetTime?.day),
         );
-        if (!open) {
+        if (!openRounds.length) {
           addLog({
             time: new Date().toLocaleTimeString(),
             message: `${token.name} 当前无开放的竞猜阶段（竞猜仅在淘汰赛段开放）`,
@@ -165,11 +166,13 @@ export function createTasksApex(deps) {
           tokenStatus.value[tokenId] = "completed";
           return;
         }
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 第${open.season}赛季 第${open.round}期，开放竞猜 ${open.tabs.length} 个阶段`,
-          type: "info",
-        });
+        for (const open of openRounds) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 第${open.season}赛季 第${open.round}期，开放竞猜 ${open.tabs.length} 个阶段`,
+            type: "info",
+          });
+        }
 
         // 3. 逐阶段分页拉取对阵并竞猜
         let successCount = 0;
@@ -205,7 +208,12 @@ export function createTasksApex(deps) {
           return undefined;
         };
 
-        for (const tab of open.tabs) {
+        // 展平所有期次×阶段，统一遍历；限流/停止时在循环头逐项中断
+        const openTabEntries = openRounds.flatMap((open) =>
+          open.tabs.map((tab) => ({ open, tab })),
+        );
+
+        for (const { open, tab } of openTabEntries) {
           if (shouldStop.value) break;
           if (abortedByRateLimit) break;
 

@@ -1,3 +1,4 @@
+import { isSameGameValue } from "@/utils/gameValue.js";
 import { getTowerActId } from "../towerActId.js";
 
 /**
@@ -1358,7 +1359,7 @@ export function createTasksTower(deps) {
           for (const xStr in gridMap) {
             for (const yStr in gridMap[xStr]) {
               const item = gridMap[xStr][yStr];
-              if (item.gridConfId == 0 && item.gridItemId > 0 && !item.isLock) {
+              if (isSameGameValue(item.gridConfId, 0) && item.gridItemId > 0 && !item.isLock) {
                 items.push({
                   x: parseInt(xStr),
                   y: parseInt(yStr),
