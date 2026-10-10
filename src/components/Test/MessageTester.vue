@@ -394,8 +394,8 @@
 import { AlertCircleOutline } from "@vicons/ionicons5";
 import { useMessage } from "naive-ui";
 import { computed, ref, watch } from "vue";
-import { copyText } from "@/utils/fileRelay";
 import { selectedTokenId, useTokenStore } from "@/stores/tokenStore";
+import { copyText } from "@/utils/fileRelay";
 
 const tokenStore = useTokenStore();
 const message = useMessage();

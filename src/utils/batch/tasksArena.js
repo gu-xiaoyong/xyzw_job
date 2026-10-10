@@ -206,7 +206,7 @@ export function createTasksArena(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -330,10 +330,7 @@ export function createTasksArena(deps) {
         const remainingDays = Math.max(0, daysInMonth - dayOfMonth);
         // 目标 = 320 - 剩余天数×3(每天3次免费钓鱼由每日任务自动消耗)
         // 例: 9/26 剩4天 → 今天补到 308, 剩余12次由后续免费钓鱼补满, 月底正好 320
-        const shouldBe = Math.min(
-          FISH_TARGET,
-          FISH_TARGET - remainingDays * 3,
-        );
+        const shouldBe = Math.min(FISH_TARGET, FISH_TARGET - remainingDays * 3);
         let remaining = Math.max(0, shouldBe - fishNum);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -515,7 +512,7 @@ export function createTasksArena(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -882,7 +879,7 @@ export function createTasksArena(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,

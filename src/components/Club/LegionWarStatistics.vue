@@ -250,11 +250,9 @@ import {
   StatsChart,
 } from "@vicons/ionicons5";
 
-import html2canvas from "html2canvas";
 import { useMessage } from "naive-ui";
 import { storeToRefs } from "pinia";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
-import * as XLSX from "xlsx";
 import { useLegionWarStore } from "@/stores/legionWarStore";
 import { useTokenStore } from "@/stores/tokenStore";
 import { isLegionWarAccessible } from "@/utils/clubBattleUtils";
@@ -283,7 +281,7 @@ const {
 const viewMode = ref("legion"); // legion | individual
 const exporting = ref(false);
 const tableMaxHeight = ref(600);
-const exportExcel = () => {
+const exportExcel = async () => {
   if (!validData.value) {
     message.warning("无数据可导出");
     return;
@@ -340,6 +338,8 @@ const exportExcel = () => {
     return;
   }
 
+  // xlsx 体积较大，仅在真正导出时按需加载
+  const XLSX = await import("xlsx");
   const ws = XLSX.utils.json_to_sheet(dataToExport);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
@@ -368,6 +368,7 @@ const exportImage = async () => {
     // 等待一点时间确保渲染完成
     await new Promise((resolve) => setTimeout(resolve, 100));
 
+    const { default: html2canvas } = await import("html2canvas"); // html2canvas 体积较大，仅在截图时按需加载
     const canvas = await html2canvas(element, {
       useCORS: true,
       scale: 2, // Higher quality

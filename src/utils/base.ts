@@ -1,17 +1,16 @@
-import moment from "moment";
-
 // 判断当前时间是否在本周内（周一00点重置）
 export const isInCurrentWeek = (timestamp: number) => {
-  // 设置周一为一周的开始
-  moment.locale("zh-cn", {
-    week: {
-      dow: 1, // 周一为一周的第一天
-      doy: 4,
-    },
-  });
-  const t = moment(timestamp);
-  const today = moment();
-  return t.isSame(today, "week");
+  const now = new Date();
+  // 周一为一周的开始：day 0=周一 … 6=周日
+  const day = (now.getDay() + 6) % 7;
+  const weekStart = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - day,
+  );
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  return timestamp >= weekStart.getTime() && timestamp < weekEnd.getTime();
 };
 
 /** 生成 [min,max] 的随机整数 */

@@ -74,15 +74,20 @@ export default defineConfig(async () => {
     dts: "src/auto-imports.d.ts",
   });
 
-  const { ArcoResolver } = componentsResolversModule ?? {};
+  const { ArcoResolver, NaiveUiResolver } = componentsResolversModule ?? {};
   const componentsPlugin = componentsModule?.default?.({
     dirs: ["src/components"],
     globsExclude: ["**/Private/**"],
-    resolvers: ArcoResolver
+    resolvers: componentsResolversModule
       ? [
-          ArcoResolver({
-            importStyle: false,
-          }),
+          NaiveUiResolver(),
+          ...(ArcoResolver
+            ? [
+                ArcoResolver({
+                  importStyle: false,
+                }),
+              ]
+            : []),
         ]
       : [],
   });
@@ -204,6 +209,17 @@ export default defineConfig(async () => {
         scss: {
           api: "modern",
           additionalData: '@use "@/assets/styles/variables.scss" as vars;',
+        },
+      },
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          // 把稳定的 vendor 拆成独立 chunk，业务代码迭代时命中缓存
+          manualChunks: {
+            "vendor-vue": ["vue", "vue-router", "pinia", "vue-i18n"],
+            "vendor-ui": ["naive-ui", "@arco-design/web-vue"],
+          },
         },
       },
     },

@@ -5,6 +5,9 @@
 // 全局连接队列控制 - 限制并发连接数
 export const connectionQueue = { active: 0 };
 
+// 已占用槽位的 token 集合：保证「谁持有谁释放」，双重释放/未持有释放不再影响计数
+const slotHolders = new Set();
+
 /**
  * 创建连接管理器
  * @param {object} options - 配置选项
@@ -16,18 +19,25 @@ export const connectionQueue = { active: 0 };
 export function createConnectionManager({ tokenStore, batchSettings, addLog }) {
   /**
    * 等待连接槽位
+   * @param {string} [tokenId] - Token ID，用于槽位归属记账
    */
-  const waitForConnectionSlot = async () => {
+  const waitForConnectionSlot = async (tokenId) => {
     while (connectionQueue.active >= batchSettings.maxActive) {
       await new Promise((r) => setTimeout(r, 1000));
     }
     connectionQueue.active++;
+    if (tokenId) slotHolders.add(tokenId);
   };
 
   /**
    * 释放连接槽位
+   * @param {string} [tokenId] - Token ID：只有实际持有槽位的 token 才会真正释放
    */
-  const releaseConnectionSlot = () => {
+  const releaseConnectionSlot = (tokenId) => {
+    if (tokenId !== undefined) {
+      if (!slotHolders.has(tokenId)) return;
+      slotHolders.delete(tokenId);
+    }
     if (connectionQueue.active > 0) {
       connectionQueue.active--;
     }
@@ -68,7 +78,7 @@ export function createConnectionManager({ tokenStore, batchSettings, addLog }) {
 
     if (!connected) {
       // 等待连接槽位，限制并发连接数
-      await waitForConnectionSlot();
+      await waitForConnectionSlot(tokenId);
 
       addLog({
         time: new Date().toLocaleTimeString(),
@@ -110,8 +120,8 @@ export function createConnectionManager({ tokenStore, batchSettings, addLog }) {
       }
 
       if (!connected) {
-        // 连接失败，释放槽位
-        releaseConnectionSlot();
+        // 连接失败，按归属释放槽位（调用方 finally 里的释放会因已不持有而成为空操作）
+        releaseConnectionSlot(tokenId);
         throw new Error("连接失败 (重试后仍超时)");
       }
     }
@@ -156,7 +166,7 @@ export function createConnectionManager({ tokenStore, batchSettings, addLog }) {
    */
   const closeConnection = (tokenId, tokenName) => {
     tokenStore.closeWebSocketConnection(tokenId);
-    releaseConnectionSlot();
+    releaseConnectionSlot(tokenId);
     addLog({
       time: new Date().toLocaleTimeString(),
       message: `${tokenName} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,

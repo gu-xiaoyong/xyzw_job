@@ -226,6 +226,7 @@ export async function downloadBinFile(
     if (relayUrl) {
       showBinRelayDialog(fileName, relayUrl);
     } else {
+      // eslint-disable-next-line no-alert -- 独立下载页兜底提示，无 UI 框架可用，需阻断式告知
       window.alert(
         "已尝试下载。如果没有生成文件(常见于 App 内置浏览器),请复制本页地址到系统浏览器打开后重新下载。",
       );

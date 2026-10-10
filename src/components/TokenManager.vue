@@ -151,9 +151,9 @@ import {
 } from "@vicons/ionicons5";
 import { NIcon, useDialog, useMessage } from "naive-ui";
 import { h } from "vue";
-import { copyText } from "@/utils/fileRelay";
 import { useGameRolesStore } from "@/stores/gameRoles";
 import { useLocalTokenStore } from "@/stores/localTokenManager";
+import { copyText } from "@/utils/fileRelay";
 
 const message = useMessage();
 const dialog = useDialog();

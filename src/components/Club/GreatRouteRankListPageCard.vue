@@ -674,7 +674,6 @@
 <script setup>
 import { Copy, DocumentText, Refresh } from "@vicons/ionicons5";
 
-import html2canvas from "html2canvas";
 import { NAvatar, NModal, NPagination, useMessage } from "naive-ui";
 import { computed, onMounted, reactive, ref } from "vue";
 import { useTokenStore } from "@/stores/tokenStore";
@@ -1597,6 +1596,7 @@ const exportToImage = async () => {
       : exportDom.value.scrollWidth;
 
     // 5. 用html2canvas渲染DOM为Canvas
+    const { default: html2canvas } = await import("html2canvas"); // html2canvas 体积较大，仅在截图时按需加载
     const canvas = await html2canvas(exportDom.value, {
       scale: 2, // 放大2倍，解决图片模糊问题
       useCORS: true, // 允许跨域图片（若DOM内有远程图片，需开启）

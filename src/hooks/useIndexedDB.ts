@@ -43,6 +43,52 @@ interface DBConfig {
   storeName?: "tokens";
 }
 
+// 模块级共享连接：按 dbName@version 复用，避免每个 hook 实例各开一个从不关闭的连接
+const dbCache = new Map<string, Promise<IDBPDatabase<ArrayBufferDB>>>();
+// blocked/blocking 时机发生在 openDB 回调里，先记录下来由后续操作上报
+let sharedDBWarning: string | null = null;
+
+const openSharedDB = (
+  dbName: string,
+  version: number,
+  storeName: string,
+): Promise<IDBPDatabase<ArrayBufferDB>> => {
+  const cacheKey = `${dbName}@${version}`;
+  const cached = dbCache.get(cacheKey);
+  if (cached) return cached;
+
+  const promise = openDB<ArrayBufferDB>(dbName, version, {
+    upgrade(db) {
+      // 创建对象存储空间（如果不存在）
+      if (!db.objectStoreNames.contains(storeName)) {
+        const store = db.createObjectStore(storeName, { keyPath: "id" });
+        // 创建创建时间索引
+        store.createIndex("by-created", "createdAt");
+        console.log(`✅ IndexedDB 存储空间 "${storeName}" 创建成功`);
+      }
+    },
+    blocked() {
+      sharedDBWarning =
+        "数据库被其他标签页阻塞，请关闭其他使用相同数据库的标签页";
+      console.warn(`⚠️ IndexedDB "${dbName}": ${sharedDBWarning}`);
+    },
+    blocking() {
+      sharedDBWarning = "数据库需要升级，请关闭所有标签页后重试";
+      console.warn(`⚠️ IndexedDB "${dbName}": ${sharedDBWarning}`);
+    },
+    terminated() {
+      // 连接意外终止时移出缓存，后续操作会自动重开
+      dbCache.delete(cacheKey);
+      console.warn(`⚠️ IndexedDB "${dbName}" 连接意外终止`);
+    },
+  });
+
+  // 打开失败时清掉缓存，允许下次重试
+  promise.catch(() => dbCache.delete(cacheKey));
+  dbCache.set(cacheKey, promise);
+  return promise;
+};
+
 /**
  * Vue3 Hook for IndexedDB ArrayBuffer storage
  */
@@ -52,44 +98,26 @@ export function useIndexedDB(config: DBConfig = {}): UseIndexedDBReturn {
   // 响应式状态
   const isReady = ref(false);
   const error = ref<string | null>(null);
-  const db = ref<IDBPDatabase<ArrayBufferDB> | null>(null);
 
-  /**
-   * 初始化数据库
-   */
-  const initDB = async (): Promise<void> => {
+  const withDB = async <T>(
+    opName: string,
+    fallback: T,
+    op: (db: IDBPDatabase<ArrayBufferDB>) => Promise<T>,
+  ): Promise<T> => {
     try {
-      error.value = null;
-
-      const database = await openDB<ArrayBufferDB>(dbName, version, {
-        upgrade(db) {
-          // 创建对象存储空间（如果不存在）
-          if (!db.objectStoreNames.contains(storeName)) {
-            const store = db.createObjectStore(storeName, { keyPath: "id" });
-            // 创建创建时间索引
-            store.createIndex("by-created", "createdAt");
-            console.log(`✅ IndexedDB 存储空间 "${storeName}" 创建成功`);
-          }
-        },
-        blocked() {
-          error.value =
-            "数据库被其他标签页阻塞，请关闭其他使用相同数据库的标签页";
-        },
-        blocking() {
-          error.value = "数据库需要升级，请关闭所有标签页后重试";
-        },
-        terminated() {
-          error.value = "数据库连接意外终止";
-        },
-      });
-
-      db.value = database;
-      isReady.value = true;
-      console.log(`✅ IndexedDB "${dbName}" 初始化成功`);
+      const db = await openSharedDB(dbName, version, storeName);
+      if (sharedDBWarning) {
+        error.value = sharedDBWarning;
+      } else {
+        error.value = null;
+        isReady.value = true;
+      }
+      return await op(db);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "未知错误";
-      error.value = `初始化数据库失败: ${errorMessage}`;
-      console.error("❌ IndexedDB 初始化错误:", err);
+      error.value = `${opName}: ${errorMessage}`;
+      console.error(`❌ IndexedDB ${opName}错误:`, err);
+      return fallback;
     }
   };
 
@@ -101,12 +129,7 @@ export function useIndexedDB(config: DBConfig = {}): UseIndexedDBReturn {
     data: ArrayBuffer,
     metadata?: Record<string, any>,
   ): Promise<boolean> => {
-    if (!db.value) {
-      error.value = "数据库未初始化";
-      return false;
-    }
-
-    try {
+    return withDB("存储数据", false, async (db) => {
       const item = {
         id: key,
         data,
@@ -115,30 +138,20 @@ export function useIndexedDB(config: DBConfig = {}): UseIndexedDBReturn {
         updatedAt: new Date(),
       };
 
-      await db.value.put(storeName, item);
+      await db.put(storeName, item);
       console.log(
         `✅ ArrayBuffer 存储成功，键: ${key}, 大小: ${data.byteLength} 字节`,
       );
       return true;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "未知错误";
-      error.value = `存储数据失败: ${errorMessage}`;
-      console.error("❌ 存储 ArrayBuffer 错误:", err);
-      return false;
-    }
+    });
   };
 
   /**
    * 获取 ArrayBuffer 数据
    */
   const getArrayBuffer = async (key: string): Promise<ArrayBuffer | null> => {
-    if (!db.value) {
-      error.value = "数据库未初始化";
-      return null;
-    }
-
-    try {
-      const result = await db.value.get(storeName, key);
+    return withDB("读取数据", null, async (db) => {
+      const result = await db.get(storeName, key);
 
       if (!result) {
         console.warn(`⚠️ 未找到键为 "${key}" 的数据`);
@@ -149,73 +162,38 @@ export function useIndexedDB(config: DBConfig = {}): UseIndexedDBReturn {
         `✅ ArrayBuffer 读取成功，键: ${key}, 大小: ${result.data.byteLength} 字节`,
       );
       return result.data;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "未知错误";
-      error.value = `读取数据失败: ${errorMessage}`;
-      console.error("❌ 读取 ArrayBuffer 错误:", err);
-      return null;
-    }
+    });
   };
 
   /**
    * 获取所有存储的键
    */
   const getAllKeys = async (): Promise<string[]> => {
-    if (!db.value) {
-      error.value = "数据库未初始化";
-      return [];
-    }
-
-    try {
-      return await db.value.getAllKeys(storeName);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "未知错误";
-      error.value = `获取键列表失败: ${errorMessage}`;
-      console.error("❌ 获取键列表错误:", err);
-      return [];
-    }
+    return withDB("获取键列表", [] as string[], (db) =>
+      db.getAllKeys(storeName),
+    );
   };
 
   /**
    * 删除指定的 ArrayBuffer 数据
    */
   const deleteArrayBuffer = async (key: string): Promise<boolean> => {
-    if (!db.value) {
-      error.value = "数据库未初始化";
-      return false;
-    }
-
-    try {
-      await db.value.delete(storeName, key);
+    return withDB("删除数据", false, async (db) => {
+      await db.delete(storeName, key);
       console.log(`✅ ArrayBuffer 删除成功，键: ${key}`);
       return true;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "未知错误";
-      error.value = `删除数据失败: ${errorMessage}`;
-      console.error("❌ 删除 ArrayBuffer 错误:", err);
-      return false;
-    }
+    });
   };
 
   /**
    * 清空所有数据
    */
   const clearAll = async (): Promise<boolean> => {
-    if (!db.value) {
-      error.value = "数据库未初始化";
-      return false;
-    }
-
-    try {
-      await db.value.clear(storeName);
+    return withDB("清空数据", false, async (db) => {
+      await db.clear(storeName);
       console.log("✅ 所有 ArrayBuffer 数据已清空");
       return true;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "未知错误";
-      error.value = `清空数据失败: ${errorMessage}`;
-      console.error("❌ 清空数据错误:", err);
-      return false;
-    }
+    });
   };
 
   /**
@@ -225,12 +203,8 @@ export function useIndexedDB(config: DBConfig = {}): UseIndexedDBReturn {
     totalSize: number;
     keyCount: number;
   }> => {
-    if (!db.value) {
-      return { totalSize: 0, keyCount: 0 };
-    }
-
-    try {
-      const allItems = await db.value.getAll(storeName);
+    return withDB("获取存储信息", { totalSize: 0, keyCount: 0 }, async (db) => {
+      const allItems = await db.getAll(storeName);
       const totalSize = allItems.reduce(
         (size, item) => size + item.data.byteLength,
         0,
@@ -238,13 +212,8 @@ export function useIndexedDB(config: DBConfig = {}): UseIndexedDBReturn {
       const keyCount = allItems.length;
 
       return { totalSize, keyCount };
-    } catch (err) {
-      console.error("❌ 获取存储信息错误:", err);
-      return { totalSize: 0, keyCount: 0 };
-    }
+    });
   };
-
-  initDB();
 
   return {
     // 状态

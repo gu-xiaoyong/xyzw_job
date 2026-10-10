@@ -9,10 +9,17 @@
  */
 
 import {
+  ApexAction,
+  apexCooldownLeft,
+  isApexRateLimited,
+  runApexAction,
+} from "@/utils/apexRateLimit";
+import {
   ApexScheduleStatus,
   ApexStageType,
   calibrateServerTime,
   checkNowInSeason,
+  checkSupportInTime,
   getAdvanceNum,
   getAvailableRounds,
   getCurrentRounds,
@@ -21,14 +28,7 @@ import {
   getScheduleIdByStage,
   getScheduleStatus,
   getSupportGroupId,
-  checkSupportInTime,
 } from "@/utils/apexRules";
-import {
-  ApexAction,
-  apexCooldownLeft,
-  isApexRateLimited,
-  runApexAction,
-} from "@/utils/apexRateLimit";
 
 /** 单次请求超时（ms） */
 const TIMEOUT_MS = 8000;
@@ -112,7 +112,8 @@ export function createTasksApex(deps) {
     // 运行标识：用于确认前端加载的是修复后的代码
     addLog({
       time: new Date().toLocaleTimeString(),
-      message: "=== 逐鹿盐山竞猜 v3：限流自适应 + 票数跟投，已竞猜队伍自动跳过 ===",
+      message:
+        "=== 逐鹿盐山竞猜 v3：限流自适应 + 票数跟投，已竞猜队伍自动跳过 ===",
       type: "info",
     });
 
@@ -418,7 +419,7 @@ export function createTasksApex(deps) {
         }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -530,20 +531,31 @@ export function createTasksApex(deps) {
         }
 
         // 5. 助威榜分组号：淘汰赛段优先，其次正式赛段，再回退竞猜活跃场次
-        let scheduleId = getScheduleIdByStage(ApexStageType.TaoTai, round, season);
+        let scheduleId = getScheduleIdByStage(
+          ApexStageType.TaoTai,
+          round,
+          season,
+        );
         if (scheduleId < 0) {
-          scheduleId = getScheduleIdByStage(ApexStageType.ZhengShi, round, season);
+          scheduleId = getScheduleIdByStage(
+            ApexStageType.ZhengShi,
+            round,
+            season,
+          );
         }
         if (scheduleId < 0) {
-          const activeGuess = Object.keys(apexRoleInfo.guessClaimMap || {}).find(
-            (key) => Object.keys(apexRoleInfo.guessClaimMap[key] || {}).length === 0,
+          const activeGuess = Object.keys(
+            apexRoleInfo.guessClaimMap || {},
+          ).find(
+            (key) =>
+              Object.keys(apexRoleInfo.guessClaimMap[key] || {}).length === 0,
           );
           if (activeGuess) scheduleId = Number(activeGuess);
         }
         const groupId = getSupportGroupId(groupMap, scheduleId);
 
         // 6. 拉取助威榜（分页）
-        let voteList = [];
+        const voteList = [];
         let idx = 0;
         for (let page = 0; page < 10; page++) {
           const resp = await tokenStore.sendMessageWithPromise(
@@ -622,7 +634,7 @@ export function createTasksApex(deps) {
         }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -660,7 +672,8 @@ export function createTasksApex(deps) {
 
     addLog({
       time: new Date().toLocaleTimeString(),
-      message: "=== 逐鹿盐山任务领取 v3：间隔对齐客户端实测(1.3s)，已领取跳过 ===",
+      message:
+        "=== 逐鹿盐山任务领取 v3：间隔对齐客户端实测(1.3s)，已领取跳过 ===",
       type: "info",
     });
 
@@ -739,7 +752,7 @@ export function createTasksApex(deps) {
               abortedByRateLimit = true;
               addLog({
                 time: new Date().toLocaleTimeString(),
-                  message: `${token.name} 连续被服务器限流（200400），约 ${Math.ceil(apexCooldownLeft(ApexAction.CLAIM, String(tokenId)) / 1000)}s 后可继续，本次中止剩余领取`,
+                message: `${token.name} 连续被服务器限流（200400），约 ${Math.ceil(apexCooldownLeft(ApexAction.CLAIM, String(tokenId)) / 1000)}s 后可继续，本次中止剩余领取`,
                 type: "warning",
               });
             } else if (/服务器错误: 200\d{3}\b/.test(msg)) {
@@ -790,7 +803,7 @@ export function createTasksApex(deps) {
         }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -1008,7 +1021,7 @@ export function createTasksApex(deps) {
         }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,

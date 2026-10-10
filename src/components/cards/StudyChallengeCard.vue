@@ -1,7 +1,7 @@
 <template>
   <MyCard
     class="study"
-    :statusClass="{ weekly: true, completed: study.isCompleted }"
+    :status-class="{ weekly: true, completed: study.isCompleted }"
   >
     <template #icon>
       <img src="/icons/1736425783912140.png" alt="学习图标" />
@@ -58,14 +58,14 @@
 </template>
 
 <script setup>
-import { computed, watch } from "vue";
 import { useMessage } from "naive-ui";
-import {
-  preloadQuestions,
-  getQuestionCount,
-} from "@/utils/studyQuestionsFromJSON.js";
+import { computed, watch } from "vue";
 import { useTokenStore } from "@/stores/tokenStore";
 import { isSameGameValue } from "@/utils/gameValue.js";
+import {
+  getQuestionCount,
+  preloadQuestions,
+} from "@/utils/studyQuestionsFromJSON.js";
 import MyCard from "../Common/MyCard.vue";
 
 const tokenStore = useTokenStore();
@@ -133,7 +133,7 @@ const startStudy = async () => {
     }, 40000);
   } catch (error) {
     console.error("启动答题失败:", error);
-    message.error("启动答题失败: " + error.message);
+    message.error(`启动答题失败: ${error.message}`);
   }
 };
 </script>

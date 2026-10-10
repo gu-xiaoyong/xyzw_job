@@ -2,8 +2,6 @@
  * 盐场匹配数据函数
  */
 
-import * as XLSX from "xlsx";
-
 /**
  * 获取今天日期
  * @returns {string} 格式化的日期字符串 YYYY/MM/DD
@@ -20,12 +18,14 @@ export function gettoday() {
  * 格式化盐场匹配数据用于导出
  * @param {Array} legionRankList - 成员详情列表
  * @param {string} queryDate - 查询日期
- * @returns {string} 格式化的文本
+ * @returns {Promise<string>} 格式化的文本
  */
-export function formatWarrankRecordsForExport(legionRankList, queryDate) {
+export async function formatWarrankRecordsForExport(legionRankList, queryDate) {
   if (!legionRankList || legionRankList.length === 0) {
     return "暂无战绩数据";
   }
+  // xlsx 体积较大，仅在真正导出时按需加载
+  const XLSX = await import("xlsx");
   // 构造工作表数据
   const worksheetData = [
     [

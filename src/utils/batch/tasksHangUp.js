@@ -8,10 +8,17 @@ import { isInCurrentWeek } from "@/utils/base";
  * 判断本周答题是否已完成（答满10题且开始时间在本周内）
  */
 const isStudyCompletedThisWeek = (study) => {
-  if (!study || study.maxCorrectNum === undefined || study.beginTime === undefined) {
+  if (
+    !study ||
+    study.maxCorrectNum === undefined ||
+    study.beginTime === undefined
+  ) {
     return false;
   }
-  return Number(study.maxCorrectNum) >= 10 && isInCurrentWeek(Number(study.beginTime) * 1000);
+  return (
+    Number(study.maxCorrectNum) >= 10 &&
+    isInCurrentWeek(Number(study.beginTime) * 1000)
+  );
 };
 
 /**
@@ -112,7 +119,7 @@ export function createTasksHangUp(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -182,7 +189,7 @@ export function createTasksHangUp(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -416,7 +423,7 @@ export function createTasksHangUp(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -479,7 +486,7 @@ export function createTasksHangUp(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -664,7 +671,7 @@ export function createTasksHangUp(deps) {
         }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭`,
@@ -828,7 +835,7 @@ export function createTasksHangUp(deps) {
         }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭`,

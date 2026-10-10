@@ -132,7 +132,8 @@ export function createTasksLegacy(deps) {
         console.error(error);
         // 200020 = 暂无可领取（挂机无积累）; 12400000 = 领取间隔未到（刚开启探索等），均为正常情况，降级 info 不算失败
         const codeMatch = /服务器错误: (\d+)/.exec(error.message || "");
-        const errorCode = error?.code ?? (codeMatch ? Number(codeMatch[1]) : null);
+        const errorCode =
+          error?.code ?? (codeMatch ? Number(codeMatch[1]) : null);
         if (errorCode === 200020 || errorCode === 12400000) {
           tokenStatus.value[tokenId] = "completed";
           addLog({
@@ -173,7 +174,7 @@ export function createTasksLegacy(deps) {
         }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -229,7 +230,7 @@ export function createTasksLegacy(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -463,7 +464,7 @@ export function createTasksLegacy(deps) {
           }
         } finally {
           tokenStore.closeWebSocketConnection(tokenId);
-          releaseConnectionSlot();
+          releaseConnectionSlot(tokenId);
           addLog({
             time: new Date().toLocaleTimeString(),
             message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,

@@ -20,17 +20,7 @@
               <div style="font-size: 14px; color: #495057">
                 共 {{ scheduledTasks.length }} 个定时任务
               </div>
-              <div
-                v-if="shortestCountdownTask"
-                style="font-size: 14px; font-weight: 500; color: #1677ff"
-              >
-                即将执行：{{ shortestCountdownTask.task.name }} ({{
-                  shortestCountdownTask.countdown.formatted
-                }})
-              </div>
-              <div v-else style="font-size: 14px; color: #6c757d">
-                暂无定时任务
-              </div>
+              <NextTaskBanner :tasks="scheduledTasks" />
               <div class="header-info-actions">
                 <n-button type="primary" size="small" @click="openTaskModal">
                   新增定时任务
@@ -48,7 +38,11 @@
                 >
                   <n-button size="small">导入配置</n-button>
                 </n-upload>
-                <n-button size="small" type="info" @click="showCloudModal = true">
+                <n-button
+                  size="small"
+                  type="info"
+                  @click="showCloudModal = true"
+                >
                   云端定时
                 </n-button>
               </div>
@@ -309,7 +303,11 @@
         </n-card>
 
         <!-- Batch Functions -->
-        <n-card title="批量功能列表" class="func-tabs-card" style="margin-top: 16px">
+        <n-card
+          title="批量功能列表"
+          class="func-tabs-card"
+          style="margin-top: 16px"
+        >
           <n-tabs type="line" animated>
             <n-tab-pane name="daily" tab="日常">
               <n-space>
@@ -1723,11 +1721,16 @@
       <div class="settings-content">
         <n-alert type="info" show-icon style="margin-bottom: 12px">
           这里保存的是要下发到游戏服务器的黑市采购清单。每条填写 `itemId`
-          和折扣，折扣范围 1-10；保存后需手动执行“一键配置黑市清单”才会真正写入服务器。
+          和折扣，折扣范围
+          1-10；保存后需手动执行“一键配置黑市清单”才会真正写入服务器。
         </n-alert>
 
         <div style="display: flex; gap: 12px; margin-bottom: 12px">
-          <n-button size="small" type="primary" @click="addBlackMarketPurchaseItem">
+          <n-button
+            size="small"
+            type="primary"
+            @click="addBlackMarketPurchaseItem"
+          >
             新增条目
           </n-button>
           <n-button size="small" @click="resetBlackMarketPurchaseList">
@@ -1736,7 +1739,8 @@
         </div>
 
         <n-alert type="warning" show-icon style="margin-bottom: 12px">
-          优先从下拉框选择常用物品，系统会自动填入 `itemId`、备注和推荐折扣；如果下拉里没有，再手动填写 `itemId`。
+          优先从下拉框选择常用物品，系统会自动填入
+          `itemId`、备注和推荐折扣；如果下拉里没有，再手动填写 `itemId`。
         </n-alert>
 
         <div
@@ -1771,7 +1775,11 @@
             :max="10"
           />
           <n-input v-model:value="item.note" placeholder="备注（可选）" />
-          <n-button type="error" secondary @click="removeBlackMarketPurchaseItem(index)">
+          <n-button
+            type="error"
+            secondary
+            @click="removeBlackMarketPurchaseItem(index)"
+          >
             删除
           </n-button>
         </div>
@@ -1838,20 +1846,7 @@
           </div>
           <div style="margin-bottom: 4px">
             <span style="color: #6b7280">下次执行：</span>
-            <span
-              :style="{
-                fontWeight: 'bold',
-                color: taskCountdowns[task.id]?.isNearExecution
-                  ? '#ff4d4f'
-                  : '#1677ff',
-              }"
-            >
-              {{
-                task.enabled
-                  ? taskCountdowns[task.id]?.formatted || "计算中..."
-                  : "已禁用"
-              }}
-            </span>
+            <TaskCountdown :task="task" />
           </div>
           <div style="margin-bottom: 4px">
             <span style="color: #6b7280">选中账号：</span>
@@ -1949,10 +1944,7 @@
         >
           {{ cloudStatus }}
         </div>
-        <div
-          v-if="cloudTestResults.length"
-          class="cloud-test-results"
-        >
+        <div v-if="cloudTestResults.length" class="cloud-test-results">
           <div
             v-for="r in cloudTestResults"
             :key="r.id"
@@ -1963,11 +1955,7 @@
           </div>
         </div>
         <div v-if="cloudLogs.length" class="cloud-logs">
-          <div
-            v-for="(log, i) in cloudLogs"
-            :key="i"
-            class="cloud-log-line"
-          >
+          <div v-for="(log, i) in cloudLogs" :key="i" class="cloud-log-line">
             <span
               :style="{
                 color:
@@ -1979,13 +1967,14 @@
               }"
             >
               [{{ log.created_at?.slice(5, 16).replace("T", " ") }}]
-              {{ log.token_name }} {{ log.task_type }}:
-              {{ log.status }}{{ log.message ? " - " + log.message : "" }}
+              {{ log.token_name }} {{ log.task_type }}: {{ log.status
+              }}{{ log.message ? ` - ${log.message}` : "" }}
             </span>
           </div>
         </div>
         <n-alert type="warning" :show-icon="false" style="margin-top: 8px">
-          同步会把 Token 明文上传到云端数据库、定时由服务端执行。仅支持领取类任务
+          同步会把 Token
+          明文上传到云端数据库、定时由服务端执行。仅支持领取类任务
           （日常礼包/挂机/爬塔/功法/活跃度/逐鹿盐山任务/珍宝阁/答题/签到/灯神），
           其余复杂任务会在同步时跳过。
         </n-alert>
@@ -2693,15 +2682,10 @@
       <n-space vertical>
         <template v-if="exportRelayUrl">
           <div style="font-size: 13px; color: #666">
-            手机上无法直接下载?复制下方链接,用系统浏览器(如
-            Chrome)打开即可下载 .json 文件:
+            手机上无法直接下载?复制下方链接,用系统浏览器(如 Chrome)打开即可下载
+            .json 文件:
           </div>
-          <n-input
-            :value="exportRelayUrl"
-            type="textarea"
-            readonly
-            :rows="3"
-          />
+          <n-input :value="exportRelayUrl" type="textarea" readonly :rows="3" />
           <n-space>
             <n-button type="primary" @click="copyExportLink">
               复制链接
@@ -2713,15 +2697,9 @@
           </n-divider>
         </template>
         <div style="font-size: 13px; color: #666">
-          也可复制以下内容,自行粘贴保存为
-          .json 文件,之后可通过"导入配置"恢复。
+          也可复制以下内容,自行粘贴保存为 .json 文件,之后可通过"导入配置"恢复。
         </div>
-        <n-input
-          :value="exportJsonText"
-          type="textarea"
-          readonly
-          :rows="10"
-        />
+        <n-input :value="exportJsonText" type="textarea" readonly :rows="10" />
         <n-button type="primary" @click="copyExportText">
           复制全部内容
         </n-button>
@@ -3213,6 +3191,9 @@
 </template>
 
 <script setup>
+import { Settings } from "@vicons/ionicons5";
+import { useLocalStorage } from "@vueuse/core";
+import { useMessage } from "naive-ui";
 // Import required dependencies
 import {
   computed,
@@ -3224,16 +3205,8 @@ import {
   ref,
   watch,
 } from "vue";
-import { useLocalStorage } from "@vueuse/core";
-import { useTokenStore, gameTokens, tokenGroups } from "@/stores/tokenStore";
 import { $emit } from "@/stores/events/index.ts";
-import { DailyTaskRunner } from "@/utils/dailyTaskRunner";
-import { preloadQuestions } from "@/utils/studyQuestionsFromJSON.js";
-import { useMessage } from "naive-ui";
-import { Settings } from "@vicons/ionicons5";
-import { toBase64Url } from "@/utils/encoding";
-import { uploadForRelayUrl } from "@/utils/fileRelay";
-
+import { gameTokens, tokenGroups, useTokenStore } from "@/stores/tokenStore";
 // Import batch task modules
 import {
   addTaskSaveLog,
@@ -3242,7 +3215,6 @@ import {
   // Constants
   boxTypeOptions,
   calculateMonthProgress,
-  calculateNextExecutionTime,
   calculateNextRuns,
   createTasksApex,
   createTasksArena,
@@ -3254,13 +3226,12 @@ import {
   createTasksHangUp,
   createTasksItem,
   createTasksLegacy,
+  createTasksPKRoom,
   createTasksStore,
   createTasksTower,
   createTasksXuanwuBlessing,
-  createTasksPKRoom,
   fishTypeOptions,
   formationOptions,
-  formatTimeDifference,
   getTodayStartSec,
   isTodayAvailable,
   matchesCronExpression,
@@ -3273,9 +3244,11 @@ import {
   defaultBlackMarketPurchaseList,
   normalizeBlackMarketPurchaseList,
 } from "@/utils/batch/blackMarketConfig";
+import { DailyTaskRunner } from "@/utils/dailyTaskRunner";
 import { goldItemsConfig, merchantConfig } from "@/utils/dreamConstants";
 
-import { isSameGameValue } from "@/utils/gameValue.js";
+import { toBase64Url } from "@/utils/encoding";
+import { uploadForRelayUrl } from "@/utils/fileRelay";
 
 import { DEFAULT_WEIRD_TOWER_MAX_CLIMB } from "@/utils/towerClimbLimit.js";
 
@@ -3362,10 +3335,6 @@ const tokens = computed(() => tokenStore.gameTokens);
 const ismengjingActivityOpen = computed(() => {
   const day = new Date().getDay();
   return day === 0 || day === 1 || day === 3 || day === 4;
-});
-const isbaokuActivityOpen = computed(() => {
-  const day = new Date().getDay();
-  return !isSameGameValue(day, 1) && !isSameGameValue(day, 2);
 });
 const isarenaActivityOpen = computed(() => {
   const hour = new Date().getHours();
@@ -4431,43 +4400,43 @@ const cloudSync = async () => {
   }
 
   const skippedTypes = new Set();
-    let cronParseFailed = 0;
-    const schedules = [];
-    for (const task of scheduledTasks.value) {
-      const selectedTasks = (task.selectedTasks || [])
-        .map((v) => CLOUD_TASK_MAP[v])
-        .filter(Boolean);
-      (task.selectedTasks || []).forEach((v) => {
-        if (!CLOUD_TASK_MAP[v]) skippedTypes.add(v);
-      });
-      const selectedTokens = (task.selectedTokens || []).filter((id) =>
-        tokens.value.some((t) => t.id === id),
-      );
-      if (selectedTasks.length === 0 || selectedTokens.length === 0) continue;
+  let cronParseFailed = 0;
+  const schedules = [];
+  for (const task of scheduledTasks.value) {
+    const selectedTasks = (task.selectedTasks || [])
+      .map((v) => CLOUD_TASK_MAP[v])
+      .filter(Boolean);
+    (task.selectedTasks || []).forEach((v) => {
+      if (!CLOUD_TASK_MAP[v]) skippedTypes.add(v);
+    });
+    const selectedTokens = (task.selectedTokens || []).filter((id) =>
+      tokens.value.some((t) => t.id === id),
+    );
+    if (selectedTasks.length === 0 || selectedTokens.length === 0) continue;
 
-      let cronExpr = task.cronExpression || "";
-      if (task.runType === "daily") {
-        // runTime 存的是 "00:10:00" 文本（toLocaleTimeString）或时间戳，统一提取时分
-        const m = String(task.runTime || "").match(/(\d{1,2}):(\d{2})/);
-        if (!m) {
-          cronParseFailed += 1;
-          continue;
-        }
-        const hh = String(Number(m[1])).padStart(2, "0");
-        cronExpr = `0 ${m[2]} ${hh} * * *`;
-      }
-      if (!cronExpr) {
+    let cronExpr = task.cronExpression || "";
+    if (task.runType === "daily") {
+      // runTime 存的是 "00:10:00" 文本（toLocaleTimeString）或时间戳，统一提取时分
+      const m = String(task.runTime || "").match(/(\d{1,2}):(\d{2})/);
+      if (!m) {
         cronParseFailed += 1;
         continue;
       }
-      schedules.push({
-        name: task.name,
-        cron_expr: cronExpr,
-        selected_tasks: selectedTasks,
-        selected_tokens: selectedTokens,
-        enabled: task.enabled !== false,
-      });
+      const hh = String(Number(m[1])).padStart(2, "0");
+      cronExpr = `0 ${m[2]} ${hh} * * *`;
     }
+    if (!cronExpr) {
+      cronParseFailed += 1;
+      continue;
+    }
+    schedules.push({
+      name: task.name,
+      cron_expr: cronExpr,
+      selected_tasks: selectedTasks,
+      selected_tokens: selectedTokens,
+      enabled: task.enabled !== false,
+    });
+  }
 
   const tokenRows = tokens.value
     .map((t) => ({
@@ -4481,14 +4450,16 @@ const cloudSync = async () => {
     cloudStatusOk.value = false;
     const hints = [];
     if (cronParseFailed)
-      hints.push(`${cronParseFailed} 个任务的运行时间无法解析（请重新编辑保存一次定时任务）`);
+      hints.push(
+        `${cronParseFailed} 个任务的运行时间无法解析（请重新编辑保存一次定时任务）`,
+      );
     if (skippedTypes.size)
       hints.push(
         `${[...skippedTypes]
           .map((v) => availableTasks.find((t) => t.value === v)?.label || v)
           .join("、")} 等复杂任务云端暂不支持`,
       );
-    cloudStatus.value = `没有可同步的定时任务${hints.length ? "：" + hints.join("；") : ""}`;
+    cloudStatus.value = `没有可同步的定时任务${hints.length ? `：${hints.join("；")}` : ""}`;
     return;
   }
 
@@ -4582,7 +4553,6 @@ const cloudTestAllTokens = async () => {
     cloudTestResultsLoading.value = false;
   }
 };
-
 
 // Deselect all tokens
 const deselectAllTokens = () => {
@@ -4893,81 +4863,8 @@ const importConfig = async ({ file }) => {
 // Scheduled Tasks Countdown
 // ======================
 
-// 注: parseCronField, calculateNextExecutionTime, formatTimeDifference 已从 @/utils/batch 导入
-
-// Task countdowns ref
-const taskCountdowns = ref({});
-const nextExecutionTimes = ref({});
-
-// Update countdowns for all tasks
-const updateCountdowns = () => {
-  const now = Date.now();
-
-  scheduledTasks.value.forEach((task) => {
-    if (!task.enabled) {
-      // Clear countdown for disabled tasks
-      delete taskCountdowns.value[task.id];
-      return;
-    }
-
-    if (
-      !nextExecutionTimes.value[task.id] ||
-      nextExecutionTimes.value[task.id] <= now
-    ) {
-      // Calculate next execution time if not set or passed
-      nextExecutionTimes.value[task.id] = calculateNextExecutionTime(task);
-    }
-
-    if (nextExecutionTimes.value[task.id]) {
-      const timeDiff = nextExecutionTimes.value[task.id] - now;
-      taskCountdowns.value[task.id] = {
-        remainingTime: Math.max(0, timeDiff),
-        formatted: formatTimeDifference(Math.max(0, timeDiff)),
-        isNearExecution: timeDiff < 5 * 60 * 1000, // Less than 5 minutes
-      };
-    }
-  });
-};
-
-// 计算最短倒计时任务
-const shortestCountdownTask = computed(() => {
-  if (scheduledTasks.value.length === 0) return null;
-
-  let shortestTask = null;
-  let shortestTime = Infinity;
-
-  // 遍历所有任务，找到倒计时最短的任务
-  scheduledTasks.value.forEach((task) => {
-    if (!task.enabled) return;
-
-    const countdown = taskCountdowns.value[task.id];
-    if (countdown && countdown.remainingTime < shortestTime) {
-      shortestTime = countdown.remainingTime;
-      shortestTask = {
-        task,
-        countdown,
-      };
-    }
-  });
-
-  return shortestTask;
-});
-
-// Start countdown interval
-let countdownInterval = null;
-
-const startCountdown = () => {
-  // Clear any existing interval
-  if (countdownInterval) {
-    clearInterval(countdownInterval);
-  }
-
-  // Update countdowns immediately
-  updateCountdowns();
-
-  // Update countdowns every second
-  countdownInterval = setInterval(updateCountdowns, 1000);
-};
+// 注: 倒计时展示已隔离到 Daily/TaskCountdown.vue 与 Daily/NextTaskBanner.vue，
+// 每秒刷新只在叶子组件内发生，避免本组件（约 7000 行）整体重渲染
 
 // ======================
 // Scheduled Tasks Scheduler
@@ -4975,18 +4872,6 @@ const startCountdown = () => {
 
 // Initialize scheduled tasks from localStorage
 loadScheduledTasks();
-
-// Watch for changes to scheduledTasks for debugging
-watch(
-  scheduledTasks,
-  () => {
-    // Reset countdowns when tasks change
-    nextExecutionTimes.value = {};
-    taskCountdowns.value = {};
-    updateCountdowns();
-  },
-  { deep: true },
-);
 
 // 修复TimePicker的"Invalid time value"错误：确保runTime的初始值不是null
 watch(
@@ -5156,20 +5041,12 @@ const handleTokenRefreshWaiting = (data) => {
 onMounted(() => {
   // Start the task scheduler after all functions are initialized
   scheduleTaskExecution();
-  // Start countdown timer
-  startCountdown();
   loadTaskTemplates();
   // 监听Token刷新等待事件
   $emit.on("token:refresh:waiting", handleTokenRefreshWaiting);
 });
 
-// Cleanup countdown interval on unmount
 onBeforeUnmount(() => {
-  if (countdownInterval) {
-    clearInterval(countdownInterval);
-    countdownInterval = null;
-  }
-
   // 移除Token刷新等待事件监听
   $emit.off("token:refresh:waiting", handleTokenRefreshWaiting);
 
@@ -5257,6 +5134,8 @@ function getScheduledTask(taskName) {
     batchGenieSweep,
     batchBuyDreamItems,
     batchXuanwuBlessing,
+    batchBookPKMatch,
+    batchClaimMail,
   };
   return Object.hasOwn(tasks, taskName) ? tasks[taskName] : undefined;
 }
@@ -6712,15 +6591,22 @@ const {
 } = tasksStore;
 
 const tasksLegacy = createTasksLegacy(createTaskDeps());
-const { batchLegacyClaim, batchLegacyStartExplore, batchLegacyGiftSendEnhanced } =
-  tasksLegacy;
+const {
+  batchLegacyClaim,
+  batchLegacyStartExplore,
+  batchLegacyGiftSendEnhanced,
+} = tasksLegacy;
 
 const tasksFootball = createTasksFootball(createTaskDeps());
 const { batchFootballBet } = tasksFootball;
 
 const tasksApex = createTasksApex(createTaskDeps());
-const { batchApexGuess, batchApexVote, batchApexClaimTask, batchApexClaimGuess } =
-  tasksApex;
+const {
+  batchApexGuess,
+  batchApexVote,
+  batchApexClaimTask,
+  batchApexClaimGuess,
+} = tasksApex;
 
 const tasksCampChallenge = createTasksCampChallenge(createTaskDeps());
 const { batchCampChallenge, batchCampChallengePet, batchCampClaimTasks } =

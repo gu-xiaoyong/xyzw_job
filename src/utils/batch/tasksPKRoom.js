@@ -5,8 +5,8 @@
 
 /**
  * 创建比赛房间类任务执行器
- * @param {Object} deps - 依赖项
- * @returns {Object} 任务函数集合
+ * @param {object} deps - 依赖项
+ * @returns {object} 任务函数集合
  */
 export function createTasksPKRoom(deps) {
   const {
@@ -81,9 +81,10 @@ export function createTasksPKRoom(deps) {
         );
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: bookedRoomId > 0
-            ? `${tokenName} 预约比赛成功(${cmd}，房间${bookedRoomId})，开赛后可领取奖励`
-            : `${tokenName} 预约比赛成功(${cmd})，开赛后可领取奖励`,
+          message:
+            bookedRoomId > 0
+              ? `${tokenName} 预约比赛成功(${cmd}，房间${bookedRoomId})，开赛后可领取奖励`
+              : `${tokenName} 预约比赛成功(${cmd})，开赛后可领取奖励`,
           type: "success",
         });
         return true;
@@ -191,7 +192,7 @@ export function createTasksPKRoom(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,

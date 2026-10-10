@@ -3,14 +3,15 @@
  * 用于一键答题功能，从公共目录读取题目数据
  */
 
-let isLoading = false;
-
 const fetchQuestions = async () => {
   // Try loading from the app base URL first (supports Vite `base` config / GitHub Pages subpaths),
   // then fall back to common locations.
-  const base = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.BASE_URL)
-    ? import.meta.env.BASE_URL
-    : "/";
+  const base =
+    typeof import.meta !== "undefined" &&
+    import.meta.env &&
+    import.meta.env.BASE_URL
+      ? import.meta.env.BASE_URL
+      : "/";
 
   const candidates = [
     `${base.replace(/\/$/, "")}/answer.json`,
@@ -18,7 +19,6 @@ const fetchQuestions = async () => {
     `answer.json`,
   ];
 
-  isLoading = true;
   for (let i = 0; i < candidates.length; i++) {
     const url = candidates[i];
     try {
@@ -33,7 +33,9 @@ const fetchQuestions = async () => {
         // If server returned HTML (like a 404 page), skip
         try {
           const text = await response.text();
-          console.warn(`studyQuestionsFromJSON: ${url} returned non-JSON response (length ${text.length})`);
+          console.warn(
+            `studyQuestionsFromJSON: ${url} returned non-JSON response (length ${text.length})`,
+          );
         } catch (e) {
           // ignore
         }
@@ -41,7 +43,6 @@ const fetchQuestions = async () => {
       }
 
       const data = await response.json();
-      isLoading = false;
       return data;
     } catch (error) {
       // try next candidate
@@ -50,7 +51,6 @@ const fetchQuestions = async () => {
     }
   }
 
-  isLoading = false;
   console.error("❌ 加载答题数据失败: 无法找到 answer.json（尝试了多个路径）");
   return [];
 };
@@ -72,7 +72,7 @@ const unknownQuestions = new Set();
 
 /**
  * 获取已收集的未命中题目列表
- * @returns {string[]}
+ * @returns {string[]} 已收集的未命中题目列表
  */
 export function getUnknownQuestions() {
   return [...unknownQuestions];
@@ -82,14 +82,17 @@ export function getUnknownQuestions() {
  * 归一化题目文本：去空白、统一小写、去标点/引号/书名号等装饰符号
  * 使「桃园三结义」与"桃园三结义"、全角/半角标点等差异不影响匹配
  * @param {string} text
- * @returns {string}
+ * @returns {string} 归一化后的题目文本
  */
 export function normalizeQuestion(text) {
   if (!text) return "";
   return String(text)
     .toLowerCase()
     .replace(/\s+/g, "")
-    .replace(/[，,、。．·？?！!：:；;（(）)「」『』“”"'‘’《》〈〉【】\[\]—\-～~]/g, "");
+    .replace(
+      /[，,、。．·？?！!：:；;（(）)「」『』“”"'‘’《》〈〉【】[\]—\-～~]/g,
+      "",
+    );
 }
 
 /**

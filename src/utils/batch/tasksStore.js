@@ -13,8 +13,8 @@ import {
 
 /**
  * 创建商店类任务执行器
- * @param {Object} deps - 依赖项
- * @returns {Object} 任务函数集合
+ * @param {object} deps - 依赖项
+ * @returns {object} 任务函数集合
  */
 export function createTasksStore(deps) {
   const {
@@ -29,6 +29,7 @@ export function createTasksStore(deps) {
     batchSettings,
     tokenStore,
     addLog,
+    message,
     currentRunningTokenId,
     delayConfig,
   } = deps;
@@ -211,7 +212,7 @@ export function createTasksStore(deps) {
         tokenStatus.value[tokenId] = "failed";
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭 (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -314,7 +315,7 @@ export function createTasksStore(deps) {
         tokenStatus.value[tokenId] = "failed";
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭 (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -397,7 +398,7 @@ export function createTasksStore(deps) {
         tokenStatus.value[tokenId] = "failed";
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭 (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -451,7 +452,7 @@ export function createTasksStore(deps) {
         tokenStatus.value[tokenId] = "failed";
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭 (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -529,7 +530,8 @@ export function createTasksStore(deps) {
         console.error(error);
         // 1300040 = 黑市无货/条件不满足等正常状态（对齐 dailyTaskRunner 分类），全员降级 info
         const codeMatch = /服务器错误: (\d+)/.exec(error.message || "");
-        const errorCode = error?.code ?? (codeMatch ? Number(codeMatch[1]) : null);
+        const errorCode =
+          error?.code ?? (codeMatch ? Number(codeMatch[1]) : null);
         if (errorCode === 1300040 || errorCode === 200020) {
           tokenStatus.value[tokenId] = "completed";
           addLog({
@@ -567,7 +569,7 @@ export function createTasksStore(deps) {
         }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭 (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -696,7 +698,7 @@ export function createTasksStore(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -778,7 +780,7 @@ export function createTasksStore(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,

@@ -747,8 +747,8 @@ import {
   getBinPayload,
   getRoleBinFileName,
 } from "@/utils/binFile";
-import { prepareMultiGameLaunch } from "@/utils/gameLauncher";
 import { copyText } from "@/utils/fileRelay";
+import { prepareMultiGameLaunch } from "@/utils/gameLauncher";
 import {
   pruneTokenSelection,
   selectAllTokenIds,

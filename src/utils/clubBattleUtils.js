@@ -4,7 +4,6 @@
  * @returns {string} 格式化的日期字符串 YYYY/MM/DD
  */
 import { copyText } from "./fileRelay";
-import * as XLSX from "xlsx";
 /**
  * 俱乐部战斗工具函数
  */
@@ -330,12 +329,14 @@ export function parseAttackType(attackType) {
  * 格式化成员战绩数据用于导出
  * @param {Array} roleDetailsList - 成员详情列表
  * @param {string} queryDate - 查询日期
- * @returns {string} 格式化的文本
+ * @returns {Promise<string>} 格式化的文本
  */
-export function formatBattleRecordsForExport(roleDetailsList, queryDate) {
+export async function formatBattleRecordsForExport(roleDetailsList, queryDate) {
   if (!roleDetailsList || roleDetailsList.length === 0) {
     return "暂无战绩数据";
   }
+  // xlsx 体积较大，仅在真正导出时按需加载
+  const XLSX = await import("xlsx");
 
   const lines = [
     `俱乐部盐场战绩 - ${queryDate}`,

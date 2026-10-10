@@ -460,10 +460,6 @@ export const useTokenStore = defineStore("tokens", () => {
 
       if (shouldReconnect) {
         wsLogger.info(`触发自动重连 [${tokenId}]`);
-        // 重置重连状态以允许立即重连
-        if (wsConnections.value[tokenId]) {
-          wsConnections.value[tokenId].reconnectAttempts = 0;
-        }
         selectToken(tokenId, true);
       }
       return true;
@@ -705,15 +701,29 @@ export const useTokenStore = defineStore("tokens", () => {
     action: string,
     sessionId: string = currentSessionId,
   ) => {
-    const state = useLocalStorage(`ws_connection_${tokenId}`, {
-      action, // 'connecting', 'connected', 'disconnecting', 'disconnected'
-      sessionId,
-      timestamp: Date.now(),
-      url: window.location.href,
-    });
+    // 直接写 localStorage（storage 事件会同步到其他标签页）；
+    // 不用 useLocalStorage，避免每次调用都创建新的持久化 ref 导致监听器累积
+    try {
+      localStorage.setItem(
+        `ws_connection_${tokenId}`,
+        JSON.stringify({
+          action, // 'connecting', 'connected', 'disconnecting', 'disconnected'
+          sessionId,
+          timestamp: Date.now(),
+          url: window.location.href,
+        }),
+      );
+    } catch (error) {
+      wsLogger.warn(`写入跨标签页连接状态失败 [${tokenId}]:`, error);
+    }
 
     if (activeConnections.value) {
-      activeConnections.value[tokenId] = state.value;
+      activeConnections.value[tokenId] = {
+        action,
+        sessionId,
+        timestamp: Date.now(),
+        url: window.location.href,
+      } as any;
     }
   };
 
@@ -814,7 +824,6 @@ export const useTokenStore = defineStore("tokens", () => {
         connectedAt: null,
         lastMessage: null,
         lastError: null,
-        reconnectAttempts: 0,
         randomSeedSynced: false,
         lastRandomSeedSource: null,
         lastRandomSeed: null,
@@ -826,7 +835,6 @@ export const useTokenStore = defineStore("tokens", () => {
         if (wsConnections.value[tokenId]) {
           wsConnections.value[tokenId].status = "connected";
           wsConnections.value[tokenId].connectedAt = new Date().toISOString();
-          wsConnections.value[tokenId].reconnectAttempts = 0;
           wsConnections.value[tokenId].randomSeedSynced = false;
           wsConnections.value[tokenId].lastRandomSeedSource = null;
           wsConnections.value[tokenId].lastRandomSeed = null;
@@ -857,6 +865,8 @@ export const useTokenStore = defineStore("tokens", () => {
             await attemptTokenRefresh(tokenId, true);
           }
         }
+        // 幂等：握手失败直接 1006 关闭且未触发 error 时，也要释放连接锁，避免锁死
+        releaseConnectionLock(tokenId, "connect");
         updateCrossTabConnectionState(tokenId, "disconnected");
       };
 
@@ -1338,9 +1348,12 @@ export const useTokenStore = defineStore("tokens", () => {
 
   // 连接监控和清理
   const connectionMonitor = {
+    monitorTimer: null as ReturnType<typeof setInterval> | null,
     // 定期检查连接状态
     startMonitoring: () => {
-      setInterval(() => {
+      // 幂等：避免重复调用时叠加多个定时器
+      if (connectionMonitor.monitorTimer) return;
+      connectionMonitor.monitorTimer = setInterval(() => {
         const now = Date.now();
 
         // 检查连接超时（超过30秒未活动）
@@ -1439,7 +1452,11 @@ export const useTokenStore = defineStore("tokens", () => {
   };
 
   // 监听localStorage变化（跨标签页通信）
+  let crossTabListenerInstalled = false;
   const setupCrossTabListener = () => {
+    // 幂等：避免重复注册 storage 监听器
+    if (crossTabListenerInstalled) return;
+    crossTabListenerInstalled = true;
     window.addEventListener("storage", (event) => {
       if (event.key?.startsWith("ws_connection_")) {
         const tokenId = event.key.replace("ws_connection_", "");
@@ -1472,24 +1489,11 @@ export const useTokenStore = defineStore("tokens", () => {
     });
   };
 
-  // 初始化
+  // 初始化（幂等：可被多个页面重复调用而不叠加定时器/监听器）
+  let storeInitialized = false;
   const initTokenStore = () => {
-    // // 恢复数据
-    // const savedTokens = localStorage.getItem('gameTokens')
-    // const savedSelectedId = localStorage.getItem('selectedTokenId')
-
-    // if (savedTokens) {
-    //   try {
-    //     gameTokens.value = JSON.parse(savedTokens)
-    //   } catch (error) {
-    //     tokenLogger.error('解析Token数据失败:', error.message)
-    //     gameTokens.value = []
-    //   }
-    // }
-
-    // if (savedSelectedId) {
-    //   selectedTokenId.value = savedSelectedId
-    // }
+    if (storeInitialized) return;
+    storeInitialized = true;
 
     // 清理过期token
     cleanExpiredTokens();

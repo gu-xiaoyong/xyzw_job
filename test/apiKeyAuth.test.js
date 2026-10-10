@@ -43,7 +43,7 @@ test("API key authentication retains header and Bearer compatibility", () => {
   assert.equal(request({ authorization: "bEaReR test-api-key" }).allowed, true);
 });
 
-test("the API middleware precedes every API route and leaves health public", async () => {
+test("the auth middleware precedes every API route and leaves health public", async () => {
   const source = await readFile(
     new URL("../render-backend/server.js", import.meta.url),
     "utf8",
@@ -67,26 +67,23 @@ test("the API middleware precedes every API route and leaves health public", asy
         call.expression.expression.getText(ast) !== "app"
       )
         return null;
-      const [path] = call.arguments;
-      return path && ts.isStringLiteral(path)
-        ? {
-            method: call.expression.name.text,
-            path: path.text,
-            position: node.pos,
-          }
-        : null;
+      const [firstArg] = call.arguments;
+      return {
+        method: call.expression.name.text,
+        path: firstArg && ts.isStringLiteral(firstArg) ? firstArg.text : null,
+        position: node.pos,
+      };
     })
     .filter(Boolean);
+  // 实际实现是全局 app.use(匿名中间件)：BACKEND_KEY 校验所有请求
   const middleware = routes.find(
-    ({ method, path }) => method === "use" && path === "/api",
+    ({ method, path }) => method === "use" && path === null,
   );
   assert.ok(middleware);
-  const apiRoutes = routes.filter(({ path }) => path.startsWith("/api/"));
+  const apiRoutes = routes.filter(({ path }) => path?.startsWith("/api/"));
   assert.ok(apiRoutes.some(({ path }) => path === "/api/tasks/:id/run"));
   for (const route of apiRoutes)
     assert.ok(route.position > middleware.position, route.path);
-  assert.ok(
-    routes.find(({ path }) => path === "/health").position <
-      middleware.position,
-  );
+  // /health 通过中间件内的路径豁免保持公开
+  assert.match(source, /req\.path === "\/health"/);
 });

@@ -19,6 +19,7 @@ const expectedRuntimeFiles = [
   "main.2a00e.js",
   "cocos2d-js-min.a5841.js",
   "xh.js",
+  "tiantiankaixin.3.8.2.js",
   "sh1.js",
   "diagnose_require.js",
 ];

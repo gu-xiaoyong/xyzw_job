@@ -336,7 +336,7 @@ export function createTasksXuanwuBlessing(deps) {
         );
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         log(`${token.name} 连接已关闭`);
       }
     });

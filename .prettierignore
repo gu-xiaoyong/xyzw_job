@@ -16,3 +16,4 @@ public/game/**
 pnpm-lock.yaml
 **/*.md
 .env*
+_ttkx_decoded.js

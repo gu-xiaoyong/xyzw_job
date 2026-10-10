@@ -7,8 +7,8 @@ import { isDungeonOpen, merchantConfig } from "@/utils/dreamConstants";
 
 /**
  * 创建梦境类任务执行器
- * @param {Object} deps - 依赖项
- * @returns {Object} 任务函数集合
+ * @param {object} deps - 依赖项
+ * @returns {object} 任务函数集合
  */
 export function createTasksDungeon(deps) {
   const {
@@ -89,7 +89,7 @@ export function createTasksDungeon(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -145,10 +145,15 @@ export function createTasksDungeon(deps) {
           tokenId,
           "role_getroleinfo",
           {},
-          15000
+          15000,
         );
 
-        if (!roleInfo || !roleInfo.role || !roleInfo.role.dungeon || !roleInfo.role.dungeon.merchant) {
+        if (
+          !roleInfo ||
+          !roleInfo.role ||
+          !roleInfo.role.dungeon ||
+          !roleInfo.role.dungeon.merchant
+        ) {
           throw new Error("无法获取梦境商店数据");
         }
 
@@ -160,7 +165,9 @@ export function createTasksDungeon(deps) {
         const operations = [];
 
         for (const itemKey of purchaseList) {
-          const [targetMerchantId, targetItemIndex] = itemKey.split("-").map(Number);
+          const [targetMerchantId, targetItemIndex] = itemKey
+            .split("-")
+            .map(Number);
 
           const merchantItems = merchantData[targetMerchantId];
           if (merchantItems) {
@@ -169,7 +176,7 @@ export function createTasksDungeon(deps) {
                 operations.push({
                   merchantId: targetMerchantId,
                   index: targetItemIndex,
-                  pos: pos
+                  pos,
                 });
               }
             }
@@ -193,7 +200,6 @@ export function createTasksDungeon(deps) {
           }
 
           try {
-
             const response = await tokenStore.sendMessageWithPromise(
               tokenId,
               "dungeon_buymerchant",
@@ -202,13 +208,19 @@ export function createTasksDungeon(deps) {
                 index: op.index,
                 pos: op.pos,
               },
-              5000
+              5000,
             );
 
             if (response && response.reward) {
               successCount++;
-              const merchantName = merchantConfig[op.merchantId] ? merchantConfig[op.merchantId].name : `商人${op.merchantId}`;
-              const itemName = merchantConfig[op.merchantId] && merchantConfig[op.merchantId].items[op.index] ? merchantConfig[op.merchantId].items[op.index] : `商品${op.index}`;
+              const merchantName = merchantConfig[op.merchantId]
+                ? merchantConfig[op.merchantId].name
+                : `商人${op.merchantId}`;
+              const itemName =
+                merchantConfig[op.merchantId] &&
+                merchantConfig[op.merchantId].items[op.index]
+                  ? merchantConfig[op.merchantId].items[op.index]
+                  : `商品${op.index}`;
 
               addLog({
                 time: new Date().toLocaleTimeString(),
@@ -240,7 +252,7 @@ export function createTasksDungeon(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
