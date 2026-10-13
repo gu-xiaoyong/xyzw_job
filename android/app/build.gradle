@@ -1,0 +1,44 @@
+plugins {
+    id 'com.android.application'
+}
+
+// 正式签名时用 -PkeystorePath=xxx -PkeystorePass=xxx;未提供则用 debug 签名
+def keystorePath = (project.findProperty('keystorePath') ?: '').toString()
+def keystorePass = (project.findProperty('keystorePass') ?: '').toString()
+
+android {
+    namespace 'com.guxiaoyong.xyzwhelper'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.guxiaoyong.xyzwhelper"
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName "1.0"
+    }
+
+    signingConfigs {
+        if (keystorePath) {
+            release {
+                storeFile file(keystorePath)
+                storePassword keystorePass
+                keyAlias 'xyzw-helper'
+                keyPassword keystorePass
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // 没提供正式 keystore 时用 debug 签名,保证个人安装可用
+            signingConfig keystorePath ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
