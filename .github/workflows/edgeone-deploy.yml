@@ -1,0 +1,21 @@
+name: Deploy to EdgeOne Pages
+
+# push 到 main 自动部署到 EdgeOne Makers 项目 xyzw-web-helper
+# 前置:仓库 Settings > Secrets and variables > Actions 添加 EDGEONE_API_TOKEN
+# (token 在 EdgeOne Makers 控制台 > API Token 页生成)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 不传产物目录,由 CLI 按 edgeone.json 自动 install+build,
+      # 与本地 `edgeone makers deploy` 流程一致(edge-functions 会被编译进部署包)
+      - name: Deploy
+        run: npx -y edgeone makers deploy -n xyzw-web-helper -t "${{ secrets.EDGEONE_API_TOKEN }}"
