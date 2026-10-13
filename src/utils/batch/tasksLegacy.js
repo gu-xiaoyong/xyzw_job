@@ -173,7 +173,7 @@ export function createTasksLegacy(deps) {
           }
         }
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -229,7 +229,7 @@ export function createTasksLegacy(deps) {
           type: "error",
         });
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -463,7 +463,7 @@ export function createTasksLegacy(deps) {
             break;
           }
         } finally {
-          tokenStore.closeWebSocketConnection(tokenId);
+          await tokenStore.closeWebSocketConnectionAsync(tokenId);
           releaseConnectionSlot(tokenId);
           addLog({
             time: new Date().toLocaleTimeString(),

@@ -418,7 +418,7 @@ export function createTasksApex(deps) {
           });
         }
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -633,7 +633,7 @@ export function createTasksApex(deps) {
           });
         }
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -802,7 +802,7 @@ export function createTasksApex(deps) {
           });
         }
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -1020,7 +1020,7 @@ export function createTasksApex(deps) {
           });
         }
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),

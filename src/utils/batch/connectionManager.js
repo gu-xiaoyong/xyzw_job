@@ -100,7 +100,7 @@ export function createConnectionManager({ tokenStore, batchSettings, addLog }) {
           type: "warning",
         });
 
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         await new Promise((r) => setTimeout(r, batchSettings.reconnectDelay));
 
         addLog({
@@ -164,8 +164,8 @@ export function createConnectionManager({ tokenStore, batchSettings, addLog }) {
    * @param {string} tokenId - Token ID
    * @param {string} tokenName - Token名称
    */
-  const closeConnection = (tokenId, tokenName) => {
-    tokenStore.closeWebSocketConnection(tokenId);
+  const closeConnection = async (tokenId, tokenName) => {
+    await tokenStore.closeWebSocketConnectionAsync(tokenId);
     releaseConnectionSlot(tokenId);
     addLog({
       time: new Date().toLocaleTimeString(),

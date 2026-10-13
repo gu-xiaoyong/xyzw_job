@@ -1059,7 +1059,19 @@ export class XyzwWebSocketClient {
     this.socket = null;
     this.connected = false;
     this._clearTimers();
-    socket?.close();
+    if (socket) {
+      socket.close();
+      // 主动断开后原生 close 事件会被 onclose 的 socket 归属守卫拦掉，
+      // 必须补发 onDisconnect，否则上层（tokenStore）的 connect 锁不会释放，
+      // 该 token 之后的每次建连都会等待锁超时并静默失败
+      if (this.onDisconnect) {
+        try {
+          this.onDisconnect({ code: 4000, reason: "client disconnected" });
+        } catch (error) {
+          wsLogger.error("disconnect 补发 onDisconnect 回调失败:", error);
+        }
+      }
+    }
   }
 
   /** debounceSend */

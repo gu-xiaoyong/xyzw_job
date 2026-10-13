@@ -6404,21 +6404,25 @@ const ensureConnection = async (
       type: "info",
     });
 
-    tokenStore.createWebSocketConnection(
+    const connectClient = await tokenStore.createWebSocketConnection(
       tokenId,
       latestToken.token,
       latestToken.wsUrl,
     );
-    connected = await waitForConnection(tokenId);
+    connected = connectClient ? await waitForConnection(tokenId) : false;
 
     if (!connected && maxRetries > 0) {
       addLog({
         time: new Date().toLocaleTimeString(),
-        message: `连接超时，尝试重连...`,
+        message: connectClient
+          ? `连接超时，尝试重连...`
+          : `连接创建失败(${tokenStore.getConnectionFailureReason(tokenId) || "未知原因"})，尝试重连...`,
         type: "warning",
       });
 
-      tokenStore.closeWebSocketConnection(tokenId);
+      // 等待旧连接真正关完再重连：关闭过程会补发断开回调，
+      // 释放被半途关闭的连接占用的连接锁，避免重连继续撞锁
+      await tokenStore.closeWebSocketConnectionAsync(tokenId);
       await new Promise((r) => setTimeout(r, batchSettings.reconnectDelay));
 
       addLog({
@@ -6428,24 +6432,28 @@ const ensureConnection = async (
       });
 
       const refreshedToken = tokens.value.find((t) => t.id === tokenId);
-      tokenStore.createWebSocketConnection(
+      const retryClient = await tokenStore.createWebSocketConnection(
         tokenId,
         refreshedToken.token,
         refreshedToken.wsUrl,
       );
-
-      connected = await waitForConnection(tokenId);
+      connected = retryClient ? await waitForConnection(tokenId) : false;
     }
 
     if (!connected) {
       // 连接失败，释放槽位
       try {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
       } finally {
         releaseConnectionSlot();
         onSlotChange?.(false);
       }
-      throw new Error("连接失败 (重试后仍超时)");
+      const failureReason = tokenStore.getConnectionFailureReason(tokenId);
+      throw new Error(
+        failureReason
+          ? `连接失败 (重试后仍超时): ${failureReason}`
+          : "连接失败 (重试后仍超时)",
+      );
     }
   }
 
@@ -6724,7 +6732,7 @@ const startBatch = async () => {
     } finally {
       if (ownsSlot) {
         try {
-          tokenStore.closeWebSocketConnection(tokenId);
+          await tokenStore.closeWebSocketConnectionAsync(tokenId);
         } finally {
           releaseConnectionSlot();
         }

@@ -211,7 +211,7 @@ export function createTasksStore(deps) {
         });
         tokenStatus.value[tokenId] = "failed";
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -314,7 +314,7 @@ export function createTasksStore(deps) {
         });
         tokenStatus.value[tokenId] = "failed";
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -397,7 +397,7 @@ export function createTasksStore(deps) {
         });
         tokenStatus.value[tokenId] = "failed";
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -451,7 +451,7 @@ export function createTasksStore(deps) {
         });
         tokenStatus.value[tokenId] = "failed";
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -568,7 +568,7 @@ export function createTasksStore(deps) {
           }
         }
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -697,7 +697,7 @@ export function createTasksStore(deps) {
           type: "error",
         });
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -779,7 +779,7 @@ export function createTasksStore(deps) {
           type: nothingToClaim ? "info" : "error",
         });
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),

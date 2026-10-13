@@ -65,6 +65,7 @@ declare interface ConnectLock {
   operation: "connect" | "disconnect";
   timestamp: number;
   sessionId: string;
+  ownerId?: number;
 }
 declare type LockCtx = Record<string, Partial<ConnectLock>>;
 
@@ -99,6 +100,8 @@ export const tokenGroups = useLocalStorage<TokenGroup[]>("tokenGroups", []);
 export const useTokenStore = defineStore("tokens", () => {
   const wsConnections = ref<WebCtx>({}); // WebSocket连接状态
   const connectionLocks = ref<LockCtx>({}); // 连接操作锁，防止竞态条件
+  // 最近一次 createWebSocketConnection 失败的原因（供上层批量任务给出明确日志）
+  const createConnectionFailureReason: Record<string, string> = {};
 
   // 游戏数据存储
   const gameData = ref({
@@ -658,6 +661,7 @@ export const useTokenStore = defineStore("tokens", () => {
   const currentSessionId = generateSessionId();
 
   // 获取连接锁
+  let lockOwnerSeq = 0;
   const acquireConnectionLock = async (
     tokenId: string,
     operation = "connect",
@@ -669,31 +673,53 @@ export const useTokenStore = defineStore("tokens", () => {
       // 等待现有操作完成，最多等待10秒
       let attempts = 0;
       while (connect[lockKey] && attempts < 100) {
+        // 锁超过30秒仍未释放视为遗留死锁（持有者的连接已被替换/销毁），
+        // 直接接管；正常创建流程从拿锁到回调释放不会超过 connectionTimeout
+        if (Date.now() - connect[lockKey].timestamp > 30000) {
+          wsLogger.warn(
+            `连接锁超过30秒未释放，接管: ${tokenId} (${operation})`,
+          );
+          break;
+        }
         await new Promise((resolve) => setTimeout(resolve, 100));
         attempts++;
       }
       if (connect[lockKey]) {
         wsLogger.warn(`连接锁等待超时: ${tokenId} (${operation})`);
-        return false;
+        return null;
       }
     }
+    const ownerId = ++lockOwnerSeq;
     connect[lockKey] = {
       tokenId,
       operation,
       timestamp: Date.now(),
       sessionId: currentSessionId,
+      ownerId,
     };
     wsLogger.connectionLock(tokenId, operation, true);
-    return true;
+    return ownerId;
   };
 
-  // 释放连接锁
-  const releaseConnectionLock = (tokenId: string, operation = "connect") => {
+  // 释放连接锁（带 ownerId 时仅持有者可释放，防止旧连接的回调误删新流程的锁）
+  const releaseConnectionLock = (
+    tokenId: string,
+    operation = "connect",
+    ownerId: number | null = null,
+  ) => {
     const lockKey = `${tokenId}_${operation}`;
-    if (connectionLocks.value[lockKey]) {
-      delete connectionLocks.value[lockKey];
-      wsLogger.connectionLock(tokenId, operation, false);
+    const lock = connectionLocks.value[lockKey];
+    if (!lock) return;
+    if (
+      ownerId !== null &&
+      lock.ownerId !== undefined &&
+      lock.ownerId !== ownerId
+    ) {
+      wsLogger.debug(`连接锁归属不匹配，跳过释放: ${tokenId} (${operation})`);
+      return;
     }
+    delete connectionLocks.value[lockKey];
+    wsLogger.connectionLock(tokenId, operation, false);
   };
 
   // 更新跨标签页连接状态
@@ -762,9 +788,11 @@ export const useTokenStore = defineStore("tokens", () => {
     wsLogger.info(`开始创建连接: ${tokenId}`);
 
     // 1. 获取连接锁，防止竞态条件
-    const lockAcquired = await acquireConnectionLock(tokenId, "connect");
-    if (!lockAcquired) {
+    const connectLockOwner = await acquireConnectionLock(tokenId, "connect");
+    if (!connectLockOwner) {
       wsLogger.error(`无法获取连接锁: ${tokenId}`);
+      createConnectionFailureReason[tokenId] =
+        "连接锁被占用超过10秒（上一次连接操作未正常结束），已放弃本次创建";
       return null;
     }
 
@@ -773,7 +801,9 @@ export const useTokenStore = defineStore("tokens", () => {
       const crossTabState = checkCrossTabConnection(tokenId);
       if (crossTabState) {
         wsLogger.debug(`跳过创建，其他标签页已有连接: ${tokenId}`);
-        releaseConnectionLock(tokenId, "connect");
+        releaseConnectionLock(tokenId, "connect", connectLockOwner);
+        createConnectionFailureReason[tokenId] =
+          `其他标签页/窗口正在连接或已连接该账号（30秒内的记录: ${crossTabState.action}），本次创建被跳过`;
         return null;
       }
 
@@ -847,7 +877,7 @@ export const useTokenStore = defineStore("tokens", () => {
           wsConnections.value[tokenId].lastRandomSeed = null;
         }
         updateCrossTabConnectionState(tokenId, "connected");
-        releaseConnectionLock(tokenId, "connect");
+        releaseConnectionLock(tokenId, "connect", connectLockOwner);
         localStorage.removeItem("xyzw_chat_msg_list");
         try {
           wsClient.send("role_getroleinfo");
@@ -876,7 +906,7 @@ export const useTokenStore = defineStore("tokens", () => {
           }
         }
         // 幂等：握手失败直接 1006 关闭且未触发 error 时，也要释放连接锁，避免锁死
-        releaseConnectionLock(tokenId, "connect");
+        releaseConnectionLock(tokenId, "connect", connectLockOwner);
         updateCrossTabConnectionState(tokenId, "disconnected");
       };
 
@@ -891,7 +921,7 @@ export const useTokenStore = defineStore("tokens", () => {
             url: wsUrl,
           };
         }
-        releaseConnectionLock(tokenId, "connect");
+        releaseConnectionLock(tokenId, "connect", connectLockOwner);
       };
 
       // 10. 设置消息监听
@@ -913,12 +943,15 @@ export const useTokenStore = defineStore("tokens", () => {
       // 11. 初始化连接
       wsClient.init();
 
+      delete createConnectionFailureReason[tokenId];
       wsLogger.verbose(`WebSocket客户端创建成功: ${tokenId}`);
       return wsClient;
     } catch (error) {
       wsLogger.error(`创建连接失败 [${tokenId}]:`, error);
+      createConnectionFailureReason[tokenId] =
+        `创建连接异常: ${error?.message || error}`;
       updateCrossTabConnectionState(tokenId, "disconnected");
-      releaseConnectionLock(tokenId, "connect");
+      releaseConnectionLock(tokenId, "connect", connectLockOwner);
       return null;
     }
   };
@@ -929,8 +962,11 @@ export const useTokenStore = defineStore("tokens", () => {
    * @returns {Promise<void>} Resolves after transport closure or the five-second limit.
    */
   const closeWebSocketConnectionAsync = async (tokenId: string) => {
-    const lockAcquired = await acquireConnectionLock(tokenId, "disconnect");
-    if (!lockAcquired) {
+    const disconnectLockOwner = await acquireConnectionLock(
+      tokenId,
+      "disconnect",
+    );
+    if (!disconnectLockOwner) {
       wsLogger.warn(`无法获取断开连接锁: ${tokenId}`);
       return;
     }
@@ -975,7 +1011,7 @@ export const useTokenStore = defineStore("tokens", () => {
     } catch (error) {
       wsLogger.error(`关闭连接失败 [${tokenId}]:`, error);
     } finally {
-      releaseConnectionLock(tokenId, "disconnect");
+      releaseConnectionLock(tokenId, "disconnect", disconnectLockOwner);
     }
   };
 
@@ -989,6 +1025,10 @@ export const useTokenStore = defineStore("tokens", () => {
   const getWebSocketStatus = (tokenId: string) => {
     return wsConnections.value[tokenId]?.status || "disconnected";
   };
+
+  // 最近一次 createWebSocketConnection 失败的原因（无则返回 null）
+  const getConnectionFailureReason = (tokenId: string) =>
+    createConnectionFailureReason[tokenId] || null;
 
   // 获取WebSocket客户端
   const getWebSocketClient = (tokenId: string) => {
@@ -1677,6 +1717,8 @@ export const useTokenStore = defineStore("tokens", () => {
     // WebSocket方法
     createWebSocketConnection,
     closeWebSocketConnection,
+    closeWebSocketConnectionAsync,
+    getConnectionFailureReason,
     getWebSocketStatus,
     getWebSocketClient,
     sendMessage,

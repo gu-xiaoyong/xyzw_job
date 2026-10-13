@@ -191,7 +191,7 @@ export function createTasksPKRoom(deps) {
           type: "error",
         });
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),

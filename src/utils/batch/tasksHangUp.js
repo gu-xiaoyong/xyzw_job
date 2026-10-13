@@ -120,7 +120,7 @@ export function createTasksHangUp(deps) {
           } finally {
             if (ownsSlot) {
               try {
-                tokenStore.closeWebSocketConnection(tokenId);
+                await tokenStore.closeWebSocketConnectionAsync(tokenId);
               } finally {
                 releaseConnectionSlot();
               }
@@ -371,7 +371,7 @@ export function createTasksHangUp(deps) {
           type: "error",
         });
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -434,7 +434,7 @@ export function createTasksHangUp(deps) {
           type: "error",
         });
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -619,7 +619,7 @@ export function createTasksHangUp(deps) {
           });
         }
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -783,7 +783,7 @@ export function createTasksHangUp(deps) {
           });
         }
       } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
+        await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
