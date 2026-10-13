@@ -23,18 +23,51 @@ export const StudyPlugin = ({ onSome, $emit }: EVM) => {
         return;
       }
 
+      // 服务器未下发题目：本周已答满10题并领过奖励，无需重复答题
+      if (questionList.length === 0) {
+        gameLogger.info(
+          "服务器未返回题目，本周已答完并领过奖励，跳过答题和领奖",
+        );
+        gameData.value.studyStatus = {
+          ...gameData.value.studyStatus,
+          isAnswering: false,
+          questionCount: 0,
+          answeredCount: 0,
+          status: "completed",
+          timestamp: Date.now(),
+          thisWeek: true,
+          isCompleted: true,
+        };
+        // 稍作停留让批量任务轮询到完成状态，再复位
+        await sleep(1500);
+        gameData.value.studyStatus = {
+          isAnswering: false,
+          questionCount: 0,
+          answeredCount: 0,
+          status: "",
+          timestamp: null,
+          baseCorrect: null,
+          correctCount: null,
+          wrongCount: null,
+        };
+        return;
+      }
+
       if (!studyId) {
         gameLogger.error("未找到学习ID");
         return;
       }
       gameLogger.info(`找到 ${questionList.length} 道题目，学习ID: ${studyId}`);
-      // 更新答题状态
+      // 更新答题状态（baseCorrect: 本轮开始时的本周累计答对数，用于结算答对/答错题数）
       gameData.value.studyStatus = {
         isAnswering: true,
         questionCount: questionList.length,
         answeredCount: 0,
         status: "answering",
         timestamp: Date.now(),
+        baseCorrect: Number(body.role?.study?.maxCorrectNum ?? 0),
+        correctCount: null,
+        wrongCount: null,
       };
       try {
         // 遍历题目并回答
@@ -52,7 +85,9 @@ export const StudyPlugin = ({ onSome, $emit }: EVM) => {
 
           if (answer === null) {
             answer = 1;
-            gameLogger.verbose(`未找到匹配答案，使用默认答案: ${answer}`);
+            gameLogger.debug(
+              `题库未命中，使用默认答案: ${answer}，题目: ${questionText}`,
+            );
           } else {
             gameLogger.debug(`找到答案: ${answer}`);
           }
@@ -126,6 +161,41 @@ export const StudyPlugin = ({ onSome, $emit }: EVM) => {
 
     gameLogger.info("一键答题完成！已尝试领取所有奖励");
 
+    // 结算答题结果：maxCorrectNum 为本周最高答对数，与开始时对比得出本轮对错
+    try {
+      const res: any = await client?.sendWithPromise(
+        "role_getroleinfo",
+        {},
+        8000,
+      );
+      const after = Number(res?.role?.study?.maxCorrectNum);
+      const base = Number(gameData.value.studyStatus.baseCorrect ?? 0);
+      const total = Number(gameData.value.studyStatus.questionCount ?? 0);
+      if (!Number.isNaN(after)) {
+        // 仅当本轮刷新纪录(或首次作答)时能确定本轮答对数
+        let correct: number | null = null;
+        if (after > base) {
+          correct = Math.min(after, total > 0 ? total : after);
+        } else if (base === 0) {
+          correct = 0;
+        }
+        if (correct !== null) {
+          const wrong = Math.max(total - correct, 0);
+          gameData.value.studyStatus.correctCount = correct;
+          gameData.value.studyStatus.wrongCount = wrong;
+          gameLogger.info(
+            `答题结果: 共${total}题, 答对${correct}题, 答错${wrong}题 (本周最高答对${after}/10)`,
+          );
+        } else {
+          gameLogger.info(
+            `本轮未超越本周最高答对${after}/10，无法统计本轮对错`,
+          );
+        }
+      }
+    } catch (error) {
+      gameLogger.warn("查询答题结果失败:", error);
+    }
+
     // 更新状态为完成
     gameData.value.studyStatus.status = "completed";
 
@@ -137,6 +207,10 @@ export const StudyPlugin = ({ onSome, $emit }: EVM) => {
       answeredCount: 0,
       status: "",
       timestamp: null,
+      baseCorrect: null,
+      correctCount: null,
+      wrongCount: null,
+      source: null,
     };
 
     // 1秒后更新游戏数据

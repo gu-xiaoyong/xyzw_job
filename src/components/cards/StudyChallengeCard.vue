@@ -59,8 +59,7 @@
 
 <script setup>
 import { useMessage } from "naive-ui";
-
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { useTokenStore } from "@/stores/tokenStore";
 import { isSameGameValue } from "@/utils/gameValue.js";
 import {
@@ -73,6 +72,23 @@ const tokenStore = useTokenStore();
 const message = useMessage();
 const study = computed(() => tokenStore.gameData.studyStatus);
 
+// 答题完成后弹出对错统计（仅单账号触发，批量任务在批量日志里看结果）
+watch(
+  () => study.value.status,
+  (status) => {
+    if (
+      status === "completed" &&
+      study.value.source === "single" &&
+      study.value.correctCount != null
+    ) {
+      const total = study.value.questionCount || 10;
+      message.success(
+        `✅ 答题完成: 共${total}题, 答对${study.value.correctCount}题, 答错${study.value.wrongCount}题`,
+      );
+    }
+  },
+);
+
 const startStudy = async () => {
   if (!tokenStore.selectedToken || study.value.thisWeek) return;
   if (
@@ -80,7 +96,6 @@ const startStudy = async () => {
     !isSameGameValue(study.value.status, "idel")
   )
     return;
-  console.log("开始答题", study.value);
 
   study.value.status = "starting";
   await preloadQuestions();
@@ -88,8 +103,6 @@ const startStudy = async () => {
   const questionCount = await getQuestionCount();
   message.info(`🚀 开始一键答题... (题库包含 ${questionCount} 道题目)`);
 
-  if (study.value.isCompleted)
-    return message.success("✅ 咸鱼大冲关任务已完成，无需重复作答！");
   try {
     tokenStore.gameData.studyStatus = {
       ...tokenStore.gameData.studyStatus,
@@ -98,6 +111,10 @@ const startStudy = async () => {
       answeredCount: 0,
       status: "starting",
       timestamp: Date.now(),
+      baseCorrect: null,
+      correctCount: null,
+      wrongCount: null,
+      source: "single",
     };
     const tokenId = tokenStore.selectedToken.id;
     tokenStore.sendMessage(tokenId, "study_startgame");
@@ -114,7 +131,6 @@ const startStudy = async () => {
         message.warning("答题超时，已自动重置状态");
       }
     }, 40000);
-    message.info(`🚀 开始一键答题... (题库包含 ${questionCount} 道题目)`);
   } catch (error) {
     console.error("启动答题失败:", error);
     message.error(`启动答题失败: ${error.message}`);

@@ -6,7 +6,14 @@
 import { $CacheManager } from "@/stores/cache";
 import { g_utils } from "./bonProtocol.js";
 import { sleep } from "./helperTaskRunner.js";
-import { gameLogger, wsLogger } from "./logger.js";
+import { gameLogger, LOG_LEVELS, wsLogger } from "./logger.js";
+
+/** 断线期间发送队列的最大长度，超过后拒绝入队（防止无限堆积） */
+const MAX_SEND_QUEUE_LENGTH = 200;
+/** 自动重连的最大连续次数 */
+const MAX_RECONNECT_ATTEMPTS = 8;
+/** 单次重连的最大退避延迟（ms） */
+const MAX_RECONNECT_DELAY = 30000;
 
 /**
  * 错误码映射表
@@ -83,6 +90,162 @@ const formatBodyForLog = (body) => {
   }
 
   return String(body);
+};
+
+/** 命令到响应的映射 - 处理响应命令与原始命令不匹配的情况（模块级常量，热路径复用） */
+const RESPONSE_TO_COMMAND_MAP = {
+  // 1:1 响应映射（优先级高）
+  fight_startpvpresp: "fight_startpvp",
+  activity_getresp: "activity_get",
+  collection_goodslistresp: "collection_goodslist",
+  collection_claimfreerewardresp: "collection_claimfreereward",
+  legion_getarearankresp: "legion_getarearank",
+  legionwar_getgoldmonthwarrankresp: "legionwar_getgoldmonthwarrank",
+  nightmare_getroleinforesp: "nightmare_getroleinfo",
+  fight_startlevelresp: "fight_startlevel",
+  fight_calcleveltimeresp: "fight_calcleveltime",
+  fight_levelresp: "fight_level",
+  studyresp: "study_startgame",
+  role_getroleinforesp: "role_getroleinfo",
+  apex_getroleinforesp: "apex_getroleinfo",
+  apex_getguesslistresp: "apex_getguesslist",
+  apex_guessresp: "apex_guess",
+  apex_get64oppomapresp: "apex_get64oppomap",
+  apex_getvotelistresp: "apex_getvotelist",
+  apex_voteresp: "apex_vote",
+  hero_recruitresp: "hero_recruit",
+  friend_batchresp: "friend_batch",
+  system_claimhanguprewardresp: "system_claimhangupreward",
+  system_hangupupgraderesp: "system_hangupupgrade",
+  item_openboxresp: ["item_openbox", "item_batchclaimboxpointreward"],
+  item_consumeresp: "item_consume",
+  bottlehelper_claimresp: "bottlehelper_claim",
+  bottlehelper_startresp: "bottlehelper_start",
+  bottlehelper_stopresp: "bottlehelper_stop",
+  legion_signinresp: "legion_signin",
+  fight_startbossresp: "fight_startboss",
+  fight_startlegionbossresp: "fight_startlegionboss",
+  fight_startareaarenaresp: "fight_startareaarena",
+  arena_startarearesp: "arena_startarea",
+  arena_getareatargetresp: "arena_getareatarget",
+  arena_getarearankresp: "arena_getarearank",
+  presetteam_saveteamresp: "presetteam_saveteam",
+  presetteam_getinforesp: "presetteam_getinfo",
+  mail_claimallattachmentresp: "mail_claimallattachment",
+  store_buyresp: "store_purchase",
+  store_getpurchaseresp: "store_getpurchase",
+  store_setpurchaseresp: "store_setpurchase",
+  store_getpurchasehistoryresp: "store_getpurchasehistory",
+  system_getdatabundleverresp: "system_getdatabundlever",
+  tower_claimrewardresp: "tower_claimreward",
+  fight_starttowerresp: "fight_starttower",
+  evotowerinforesp: "evotower_getinfo",
+  evotower_fightresp: "evotower_fight",
+  evotower_getlegionjoinmembersresp: "evotower_getlegionjoinmembers",
+  mergeboxinforesp: "mergebox_getinfo",
+  mergebox_claimfreeenergyresp: "mergebox_claimfreeenergy",
+  mergebox_openboxresp: "mergebox_openbox",
+  mergebox_automergeitemresp: "mergebox_automergeitem",
+  mergebox_mergeitemresp: "mergebox_mergeitem",
+  mergebox_claimcostprogressresp: "mergebox_claimcostprogress",
+  mergebox_claimmergeprogressresp: "mergebox_claimmergeprogress",
+  evotower_claimtaskresp: "evotower_claimtask",
+  item_openpackresp: "item_openpack",
+  equipment_quenchresp: "equipment_quench",
+  rank_getserverrankresp: "rank_getserverrank",
+  legion_claimpayloadtaskresp: "legion_claimpayloadtask",
+  legion_claimpayloadtaskprogressresp: "legion_claimpayloadtaskprogress",
+  saltroad_getwartyperesp: "saltroad_getwartype",
+  saltroad_getsaltroadwartotalrankresp: "saltroad_getsaltroadwartotalrank",
+  warguess_getrankresp: "warguess_getrank",
+  warguess_startguessresp: "warguess_startguess",
+  warguess_getguesscoinrewardresp: "warguess_getguesscoinreward",
+  league_getbattlefieldresp: "league_getbattlefield",
+  league_getgroupopponentresp: "league_getgroupopponent",
+  legion_applyjoinresp: "legion_applyjoin",
+  legion_signupresp: "legion_signup",
+  legion_payloadsignupresp: "legion_payloadsignup",
+  legionmatch_rolesignupresp: "legionmatch_rolesignup",
+  legionmatch_signupresp: "legionmatch_signup",
+  legionmatch_getrankresp: "legionmatch_getrank",
+  legionmatch_getbattlerecordresp: "legionmatch_getbattlerecord",
+  pearl_replaceskillresp: "pearl_replaceskill",
+  pearl_exchangeskillresp: "pearl_exchangeskill",
+  pearl_unloadskillresp: "pearl_unloadskill",
+  discount_getdiscountinforesp: "discount_getdiscountinfo",
+  // 升星相关响应映射
+  hero_heroupgradestarresp: "hero_heroupgradestar",
+  hero_heroupgradelevelresp: "hero_heroupgradelevel",
+  hero_heroupgradeorderresp: "hero_heroupgradeorder",
+  book_upgraderesp: "book_upgrade",
+  book_claimpointrewardresp: "book_claimpointreward",
+  // 军团信息
+  legion_getinforesp: "legion_getinfo",
+  legion_getinforresp: "legion_getinfo",
+  club_getinforesp: "club_getinfo",
+  club_gettargetteamresp: "club_gettargetteam",
+  club_attackresp: "club_attack",
+  club_attackmonsterresp: "club_attackmonster",
+  club_taskclaimresp: "club_taskclaim",
+  role_gettargetteamresp: "role_gettargetteam",
+  // 玄武赐福活动响应映射
+  activity_warordergetresp: "activity_warorderget",
+  activity_warorderclaimresp: [
+    "activity_warorderrewardclaim",
+    "activity_warordertaskclaim",
+    "activity_recyclewarorderrewardclaim",
+  ],
+  activity_getlotteryinforesp: "activity_getlotteryinfo",
+  activity_lotteryresp: "activity_lottery",
+  activity_rewardresp: "activity_claimsignreward",
+  // 功法相关响应映射
+  legacy_getinforesp: "legacy_getinfo",
+  legacy_claimhangupresp: "legacy_claimhangup",
+  legacy_beginhangupresp: "legacy_beginhangup",
+  pkroom_getinforesp: "pkroom_getinfo",
+  pkroom_getfightroominforesp: "pkroom_getfightroominfo",
+  pkroom_getfightroomdetailresp: "pkroom_getfightroomdetail",
+  pkroom_appointresp: "pkroom_appoint",
+  legacy_sendgiftresp: "legacy_sendgift",
+  legacy_getgiftsresp: "legacy_getgifts",
+  // 盐杯竞猜响应映射
+  saltcup26_getbetinforesp: "saltcup26_getbetinfo",
+  saltcup26_placebetresp: "saltcup26_placebet",
+  activity_takeegamerewardresp: "activity_startactegame",
+  // 换皮闯关相关响应映射
+  towers_getinforesp: "towers_getinfo",
+  towers_startresp: "towers_start",
+  towers_fightresp: "towers_fight",
+  // 特殊响应映射 - 有些命令有独立响应，有些用同步响应
+  task_claimdailyrewardresp: "task_claimdailyreward",
+  task_claimweekrewardresp: "task_claimweekreward",
+
+  // 同步响应映射（优先级低）
+
+  legion_researchresp: ["legion_research", "legion_resetresearch"],
+  syncresp: [
+    "system_mysharecallback",
+    "task_claimdailypoint",
+    "role_commitpassword",
+    "hero_gointobattle",
+    "hero_gobackbattle",
+    "lordweapon_changedefaultweapon",
+  ],
+  syncrewardresp: [
+    "activity_commonbuygoods",
+    "system_buygold",
+    "discount_claimreward",
+    "card_claimreward",
+    "artifact_lottery",
+    "genie_sweep",
+    "genie_buysweep",
+    "system_signinreward",
+    "system_claimcdkreward",
+    "dungeon_selecthero",
+    "artifact_exchange",
+    "hero_exchange",
+    "hero_rebirth",
+  ],
 };
 
 /**
@@ -222,8 +385,6 @@ export function registerDefaultCommands(reg) {
     .register("saltroad_getsaltroadwartotalrank")
     .register("legionwar_getgoldmonthwarrank")
     .register("legion_getopponent")
-    .register("club_getinfo")
-    .register("club_gettargetteam")
     .register("club_attack")
     .register("club_attackmonster")
     .register("club_taskclaim")
@@ -234,7 +395,7 @@ export function registerDefaultCommands(reg) {
     .register("saltroad_getsaltroadwargrouprank")
     .register("league_getbattlefield")
     .register("legion_signup") // 盐场报名
-    // 营地挑战 / 俱乐部战
+    // 营地挑战 / 俱乐部战（club_gettargetteam 带默认体，避免与前面的无体注册重复）
     .register("club_getinfo")
     .register("club_gettargetteam", { targetId: 0 })
     .register("club_getattackrecord")
@@ -287,7 +448,6 @@ export function registerDefaultCommands(reg) {
     .register("legionmatch_signup")
     .register("legionmatch_getrank")
     .register("legionmatch_getbattlerecord")
-    .register("legion_signin")
 
     // 钓鱼
     .register("artifact_lottery", { lotteryNumber: 1, newFree: true, type: 1 })
@@ -299,7 +459,7 @@ export function registerDefaultCommands(reg) {
 
     // 礼包相关
     .register("discount_claimreward", { discountId: 1 })
-    .register("collection_claimfreereward")
+    .register("collection_claimfreereward") // 珍宝阁相关（同一命令只在后面注册一次）
     .register("card_claimreward", { cardId: 1 })
 
     // 爬塔相关
@@ -307,7 +467,6 @@ export function registerDefaultCommands(reg) {
     .register("tower_claimreward")
 
     // 队伍相关
-    .register("presetteam_getinfo")
     .register("presetteam_getinfo")
     .register("presetteam_setteam")
     .register("presetteam_saveteam", { teamId: 1 })
@@ -338,7 +497,6 @@ export function registerDefaultCommands(reg) {
     // 梦魇相关
     .register("nightmare_getroleinfo")
     .register("dungeon_selecthero")
-    .register("bosstower_gethelprank")
     .register("dungeon_buymerchant")
     // 活动/任务
     .register("activity_get")
@@ -360,8 +518,13 @@ export function registerDefaultCommands(reg) {
     .register("warguess_getguesscoinreward")
     .register("legion_payloadsignup") // 蟠桃报名
 
-    // 珍宝阁相关
-    .register("collection_claimfreereward")
+    // 比赛房间(竞技大厅对战房间, 抓包确认的读取命令 + 预约命令)
+    .register("pkroom_getinfo")
+    .register("pkroom_getfightroominfo")
+    .register("pkroom_getfightroomdetail")
+    .register("pkroom_appoint")
+
+    // 珍宝阁相关（collection_claimfreereward 已在礼包相关处注册）
     .register("collection_goodslist")
 
     // 扭蛋相关
@@ -370,6 +533,8 @@ export function registerDefaultCommands(reg) {
     // 功法
     .register("legacy_getinfo")
     .register("legacy_claimhangup")
+    // 新赛季开始探索(游戏内「开始」按钮, 抓包确认)
+    .register("legacy_beginhangup")
     // 功法残卷赠送
     .register("legacy_gift_getlist")
     .register("legacy_gift_send", { recipientId: 0, itemId: 0, quantity: 0 })
@@ -401,11 +566,6 @@ export function registerDefaultCommands(reg) {
       isLocked: false,
     })
 
-    // 咸王宝库
-    .register("matchteam_getroleteaminfo")
-    .register("bosstower_getinfo")
-    .register("bosstower_startboss")
-    .register("bosstower_startbox")
     .register("discount_getdiscountinfo")
 
     // 换皮闯关相关
@@ -429,9 +589,13 @@ export function registerDefaultCommands(reg) {
     .register("apex_getguesslist", { scheduleId: 0, idx: 0 })
     .register("apex_guess", { teamId: "" })
     .register("apex_get64oppomap", { scheduleId: 0, groupId: 0 })
-    // —— APEX 逐鹿盐山：按需注册，仅登记组件实际调用的命令 ——
-    .register("apex_getvotelist")
-    .register("apex_vote", { round: 0, teamId: "" });
+    // 逐鹿盐山助威
+    .register("apex_getvotelist", { groupId: 1, round: 0, idx: 0 })
+    .register("apex_vote", { teamId: "", round: 0, voteCnt: 0 })
+    // 逐鹿盐山活跃度任务领取（confId 取值 1~7，抓包确认）
+    .register("apex_taskclaim", { confId: 0 })
+    // 逐鹿盐山竞猜奖励领取（预测成功后领奖，抓包确认）
+    .register("apex_guessclaim", { scheduleId: 0, teamId: "" });
   registry.commands.set(
     "fight_startareaarena",
     (ack = 0, seq = 0, params = {}) => {
@@ -503,8 +667,12 @@ export class XyzwWebSocketClient {
     this.showMsg = false;
     this.connected = false;
     this.isReconnecting = false; // 重连状态标志
+    this.reconnectAttempts = 0; // 连续重连次数（成功后归零）
+    this.reconnectTimer = null; // 待执行的重连定时器
 
     this.promises = Object.create(null);
+    // 原始命令 → 等待中的 seq 集合（反向索引，避免每条推送 O(n) 全表扫描）
+    this._pendingByCmd = Object.create(null);
     this.registry = registerDefaultCommands(
       new CommandRegistry(this.utils, this.enc),
     );
@@ -537,6 +705,8 @@ export class XyzwWebSocketClient {
       if (this.socket !== socket) return;
       wsLogger.info("连接成功");
       this.connected = true;
+      this.reconnectAttempts = 0;
+      this.isReconnecting = false;
       // 启动心跳机制
       this._setupHeartbeat();
       // 启动消息队列处理
@@ -784,7 +954,11 @@ export class XyzwWebSocketClient {
         .map((k) => Number.parseInt(k))
         .sort((a, b) => a - b);
       if (keys.length > 0) {
-        const maxIndex = Math.max(...keys);
+        // 循环取最大索引：大数组用 Math.max(...keys) 会栈溢出
+        let maxIndex = keys[0];
+        for (let i = 1; i < keys.length; i++) {
+          if (keys[i] > maxIndex) maxIndex = keys[i];
+        }
         const arr = Array.from({ length: maxIndex + 1 }, () => 0);
         for (const [key, value] of Object.entries(body)) {
           const index = Number.parseInt(key);
@@ -825,7 +999,7 @@ export class XyzwWebSocketClient {
     }
   }
 
-  /** 重连（防重复连接版本） */
+  /** 重连（指数退避 + 次数上限版本） */
   reconnect() {
     // 防止重复重连
     if (this.isReconnecting) {
@@ -833,7 +1007,26 @@ export class XyzwWebSocketClient {
       return;
     }
 
-    wsLogger.info("开始WebSocket重连...");
+    // 服务器持续不可达时停止重试，避免 2 秒一次的重连风暴；
+    // 上层（token 刷新 / 批量任务）会创建新客户端重新开始
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      wsLogger.error(
+        `WebSocket 重连失败已达上限 (${MAX_RECONNECT_ATTEMPTS})，停止自动重连`,
+      );
+      if (this.onError) {
+        try {
+          this.onError(new Error("重连次数超限，连接已放弃"));
+        } catch (e) {
+          wsLogger.error("重连超限回调执行失败:", e);
+        }
+      }
+      return;
+    }
+
+    this.isReconnecting = true;
+    const attempt = ++this.reconnectAttempts;
+    const delay = Math.min(1000 * 2 ** (attempt - 1), MAX_RECONNECT_DELAY);
+    wsLogger.info(`开始WebSocket重连（第 ${attempt} 次，延迟 ${delay}ms）...`);
 
     // 先取消旧会话的等待请求与队列，再安排新的重连。
     this.disconnect();
@@ -845,6 +1038,8 @@ export class XyzwWebSocketClient {
       this.reconnectTimer = null;
       try {
         this.init();
+      } catch (error) {
+        wsLogger.error("重连初始化失败:", error);
       } finally {
         // 无论成功或失败都重置重连状态
         const resetTimer = setTimeout(() => {
@@ -854,7 +1049,7 @@ export class XyzwWebSocketClient {
         }, 2000); // 2秒后允许下次重连
         this.reconnectResetTimer = resetTimer;
       }
-    }, 1000);
+    }, delay);
     this.reconnectTimer = reconnectTimer;
   }
 
@@ -893,6 +1088,14 @@ export class XyzwWebSocketClient {
   /** 发送消息 */
   send(cmd, params = {}, options = {}) {
     if (!this.connected) {
+      // 断线期间限制入队深度：队列满时直接丢弃，防止断线期间无限堆积、
+      // 重连后一次性发出全部陈旧报文（携带 Promise 的任务会由各自的超时器 reject）
+      if (this.sendQueue.length >= MAX_SEND_QUEUE_LENGTH) {
+        wsLogger.warn(
+          `WebSocket 未连接且发送队列已满 (${this.sendQueue.length})，丢弃消息: ${cmd}`,
+        );
+        return null;
+      }
       wsLogger.warn(`WebSocket 未连接，消息已入队: ${cmd}`);
       // 防止频繁重连
       if (!this.dialogStatus && !this.isReconnecting) {
@@ -947,9 +1150,10 @@ export class XyzwWebSocketClient {
       // 为此请求生成唯一的seq值
       const requestSeq = ++this.seq;
 
-      // 设置 Promise 状态，使用seq作为键
+      // 设置 Promise 状态，使用seq作为键，并登记原始命令反向索引（O(1) 匹配响应）
       const request = { resolve, reject, originalCmd: cmd, seq: requestSeq };
       this.promises[requestSeq] = request;
+      (this._pendingByCmd[cmd] ??= new Set()).add(requestSeq);
 
       // 超时处理
       const timer = setTimeout(() => {
@@ -1059,8 +1263,12 @@ export class XyzwWebSocketClient {
           task.params,
         );
 
-        // 发送前日志（仅标准五段）
-        if (raw && raw.cmd !== "_sys/ack") {
+        // 发送前日志（仅标准五段）——日志级别低于 INFO 时跳过解码，避免热路径白白多解一次 BON
+        if (
+          raw &&
+          raw.cmd !== "_sys/ack" &&
+          wsLogger.level >= LOG_LEVELS.INFO
+        ) {
           const decodedBody = this.decodeBodyForLog(raw.body);
           wsLogger.info("📤 发送报文", {
             cmd: raw.cmd,
@@ -1082,6 +1290,11 @@ export class XyzwWebSocketClient {
         }
         if (request) {
           delete this.promises[request.seq];
+          const pendingSet = this._pendingByCmd[request.originalCmd];
+          if (pendingSet) {
+            pendingSet.delete(request.seq);
+            pendingSet.add(wireSeq);
+          }
           request.seq = wireSeq;
           this.promises[wireSeq] = request;
         }
@@ -1146,7 +1359,7 @@ export class XyzwWebSocketClient {
     if (packet.resp !== undefined && this.promises[packet.resp]) {
       const promiseData = this.promises[packet.resp];
       clearTimeout(promiseData.timer);
-      delete this.promises[packet.resp];
+      this._deletePromise(packet.resp);
 
       // 获取响应数据，优先使用 rawData（ProtoMsg 自动解码），然后 decodedBody（手动解码），最后 body
       const responseBody =
@@ -1163,9 +1376,9 @@ export class XyzwWebSocketClient {
         const errorDesc =
           errorCodeMap[packet.code] || packet.hint || "未知错误";
 
-        promiseData.reject(
-          new Error(`服务器错误: ${packet.code} - ${errorDesc}`),
-        );
+        const err = new Error(`服务器错误: ${packet.code} - ${errorDesc}`);
+        err.code = packet.code;
+        promiseData.reject(err);
       }
       return;
     }
@@ -1176,205 +1389,53 @@ export class XyzwWebSocketClient {
     if (!cmd) return;
     const respCmdKey = typeof cmd === "string" ? cmd.toLowerCase() : cmd;
 
-    // 命令到响应的映射 - 处理响应命令与原始命令不匹配的情况
-    const responseToCommandMap = {
-      // 1:1 响应映射（优先级高）
-      fight_startpvpresp: "fight_startpvp",
-      activity_getresp: "activity_get",
-      collection_goodslistresp: "collection_goodslist",
-      collection_claimfreerewardresp: "collection_claimfreereward",
-      legion_getarearankresp: "legion_getarearank",
-      legionwar_getgoldmonthwarrankresp: "legionwar_getgoldmonthwarrank",
-      nightmare_getroleinforesp: "nightmare_getroleinfo",
-      fight_startlevelresp: "fight_startlevel",
-      fight_calcleveltimeresp: "fight_calcleveltime",
-      fight_levelresp: "fight_level",
-      studyresp: "study_startgame",
-      role_getroleinforesp: "role_getroleinfo",
-      apex_getroleinforesp: "apex_getroleinfo",
-      apex_getguesslistresp: "apex_getguesslist",
-      apex_guessresp: "apex_guess",
-      apex_get64oppomapresp: "apex_get64oppomap",
-      apex_getvotelistresp: "apex_getvotelist",
-      apex_voteresp: "apex_vote",
-      hero_recruitresp: "hero_recruit",
-      friend_batchresp: "friend_batch",
-      system_claimhanguprewardresp: "system_claimhangupreward",
-      system_hangupupgraderesp: "system_hangupupgrade",
-      item_openboxresp: ["item_openbox", "item_batchclaimboxpointreward"],
-      item_consumeresp: "item_consume",
-      bottlehelper_claimresp: "bottlehelper_claim",
-      bottlehelper_startresp: "bottlehelper_start",
-      bottlehelper_stopresp: "bottlehelper_stop",
-      legion_signinresp: "legion_signin",
-      fight_startbossresp: "fight_startboss",
-      fight_startlegionbossresp: "fight_startlegionboss",
-      fight_startareaarenaresp: "fight_startareaarena",
-      arena_startarearesp: "arena_startarea",
-      arena_getareatargetresp: "arena_getareatarget",
-      arena_getarearankresp: "arena_getarearank",
-      presetteam_saveteamresp: "presetteam_saveteam",
-      presetteam_getinforesp: "presetteam_getinfo",
-      mail_claimallattachmentresp: "mail_claimallattachment",
-      store_buyresp: "store_purchase",
-      store_getpurchaseresp: "store_getpurchase",
-      store_setpurchaseresp: "store_setpurchase",
-      store_getpurchasehistoryresp: "store_getpurchasehistory",
-      system_getdatabundleverresp: "system_getdatabundlever",
-      tower_claimrewardresp: "tower_claimreward",
-      fight_starttowerresp: "fight_starttower",
-      evotowerinforesp: "evotower_getinfo",
-      evotower_fightresp: "evotower_fight",
-      evotower_getlegionjoinmembersresp: "evotower_getlegionjoinmembers",
-      mergeboxinforesp: "mergebox_getinfo",
-      mergebox_claimfreeenergyresp: "mergebox_claimfreeenergy",
-      mergebox_openboxresp: "mergebox_openbox",
-      mergebox_automergeitemresp: "mergebox_automergeitem",
-      mergebox_mergeitemresp: "mergebox_mergeitem",
-      mergebox_claimcostprogressresp: "mergebox_claimcostprogress",
-      mergebox_claimmergeprogressresp: "mergebox_claimmergeprogress",
-      evotower_claimtaskresp: "evotower_claimtask",
-      item_openpackresp: "item_openpack",
-      equipment_quenchresp: "equipment_quench",
-      rank_getserverrankresp: "rank_getserverrank",
-      legion_claimpayloadtaskresp: "legion_claimpayloadtask",
-      legion_claimpayloadtaskprogressresp: "legion_claimpayloadtaskprogress",
-      saltroad_getwartyperesp: "saltroad_getwartype",
-      saltroad_getsaltroadwartotalrankresp: "saltroad_getsaltroadwartotalrank",
-      warguess_getrankresp: "warguess_getrank",
-      warguess_startguessresp: "warguess_startguess",
-      warguess_getguesscoinrewardresp: "warguess_getguesscoinreward",
-      league_getbattlefieldresp: "league_getbattlefield",
-      league_getgroupopponentresp: "league_getgroupopponent",
-      legion_applyjoinresp: "legion_applyjoin",
-      legion_signupresp: "legion_signup",
-      legion_payloadsignupresp: "legion_payloadsignup",
-      legionmatch_rolesignupresp: "legionmatch_rolesignup",
-      legionmatch_signupresp: "legionmatch_signup",
-      legionmatch_getrankresp: "legionmatch_getrank",
-      legionmatch_getbattlerecordresp: "legionmatch_getbattlerecord",
-      pearl_replaceskillresp: "pearl_replaceskill",
-      pearl_exchangeskillresp: "pearl_exchangeskill",
-      pearl_unloadskillresp: "pearl_unloadskill",
-      // 咸王宝库
-      matchteam_getroleteaminforesp: "matchteam_getroleteaminfo",
-      bosstower_getinforesp: "bosstower_getinfo",
-      bosstower_startbossresp: "bosstower_startboss",
-      bosstower_startboxresp: "bosstower_startbox",
-      discount_getdiscountinforesp: "discount_getdiscountinfo",
-      // 升星相关响应映射
-      hero_heroupgradestarresp: "hero_heroupgradestar",
-      hero_heroupgradelevelresp: "hero_heroupgradelevel",
-      hero_heroupgradeorderresp: "hero_heroupgradeorder",
-      book_upgraderesp: "book_upgrade",
-      book_claimpointrewardresp: "book_claimpointreward",
-      // 军团信息
-      legion_getinforesp: "legion_getinfo",
-      legion_getinforresp: "legion_getinfo",
-      club_getinforesp: "club_getinfo",
-      club_gettargetteamresp: "club_gettargetteam",
-      club_attackresp: "club_attack",
-      club_attackmonsterresp: "club_attackmonster",
-      club_taskclaimresp: "club_taskclaim",
-      role_gettargetteamresp: "role_gettargetteam",
-      // 玄武赐福活动响应映射
-      activity_warordergetresp: "activity_warorderget",
-      activity_warorderclaimresp: [
-        "activity_warorderrewardclaim",
-        "activity_warordertaskclaim",
-        "activity_recyclewarorderrewardclaim",
-      ],
-      activity_getlotteryinforesp: "activity_getlotteryinfo",
-      activity_lotteryresp: "activity_lottery",
-      activity_rewardresp: "activity_claimsignreward",
-      bosstower_gethelprankresp: "bosstower_gethelprank",
-      // 功法相关响应映射
-      legacy_getinforesp: "legacy_getinfo",
-      legacy_claimhangupresp: "legacy_claimhangup",
-      legacy_sendgiftresp: "legacy_sendgift",
-      legacy_getgiftsresp: "legacy_getgifts",
-      // 盐杯竞猜响应映射
-      saltcup26_getbetinforesp: "saltcup26_getbetinfo",
-      saltcup26_placebetresp: "saltcup26_placebet",
-      activity_takeegamerewardresp: "activity_startactegame",
-      // 换皮闯关相关响应映射
-      towers_getinforesp: "towers_getinfo",
-      towers_startresp: "towers_start",
-      towers_fightresp: "towers_fight",
-      // 特殊响应映射 - 有些命令有独立响应，有些用同步响应
-      task_claimdailyrewardresp: "task_claimdailyreward",
-      task_claimweekrewardresp: "task_claimweekreward",
-
-      // 同步响应映射（优先级低）
-
-      legion_researchresp: ["legion_research", "legion_resetresearch"],
-      syncresp: [
-        "system_mysharecallback",
-        "task_claimdailypoint",
-        "role_commitpassword",
-        "hero_gointobattle",
-        "hero_gobackbattle",
-        "lordweapon_changedefaultweapon",
-      ],
-      syncrewardresp: [
-        "activity_commonbuygoods",
-        "system_buygold",
-        "discount_claimreward",
-        "card_claimreward",
-        "artifact_lottery",
-        "genie_sweep",
-        "genie_buysweep",
-        "system_signinreward",
-        "system_claimcdkreward",
-        "dungeon_selecthero",
-        "artifact_exchange",
-        "hero_exchange",
-        "hero_rebirth",
-      ],
-    };
-
-    // 获取原始命令名（支持一对一和一对多映射）
+    // 命令到响应的映射已提升为模块级常量 RESPONSE_TO_COMMAND_MAP
+    // （热路径：每条未带 resp 的推送消息都会走到这里，避免每条消息重建 150 项对象）（支持一对一和一对多映射）
     // 使用小写进行映射匹配，兼容服务端大小写差异
-    let originalCmds = responseToCommandMap[respCmdKey];
+    let originalCmds = RESPONSE_TO_COMMAND_MAP[respCmdKey];
     if (!originalCmds) {
       originalCmds = [respCmdKey]; // 如果没有映射，使用响应命令本身（小写）
     } else if (typeof originalCmds === "string") {
       originalCmds = [originalCmds]; // 转换为数组
     }
 
-    // 查找对应的 Promise - 遍历所有等待中的 Promise（向后兼容）
-    for (const [requestId, promiseData] of Object.entries(this.promises)) {
-      // 检查 Promise 是否匹配当前响应的任一原始命令
-      if (originalCmds.includes(promiseData.originalCmd)) {
-        clearTimeout(promiseData.timer);
-        delete this.promises[requestId];
+    // 查找对应的 Promise - 通过原始命令反向索引 O(1) 定位（保持先入先出顺序）
+    for (const originalCmd of originalCmds) {
+      const pendingSet = this._pendingByCmd[originalCmd];
+      if (!pendingSet || pendingSet.size === 0) continue;
 
-        // 获取响应数据，优先使用 rawData（ProtoMsg 自动解码），然后 decodedBody（手动解码），最后 body
-        const responseBody =
-          packet.rawData !== undefined
-            ? packet.rawData
-            : packet.decodedBody !== undefined
-              ? packet.decodedBody
-              : packet.body;
+      const requestId = pendingSet.values().next().value;
+      const promiseData = this.promises[requestId];
+      if (!promiseData) continue;
 
-        // 附加原始命令名到响应对象
-        if (responseBody && typeof responseBody === "object") {
-          responseBody._originalCmd = promiseData.originalCmd;
-        }
+      clearTimeout(promiseData.timer);
+      this._deletePromise(requestId);
 
-        if (packet.code === 0 || packet.code === undefined) {
-          promiseData.resolve(responseBody || packet);
-        } else {
-          // 获取错误描述
-          const errorDesc =
-            errorCodeMap[packet.code] || packet.hint || "未知错误";
+      // 获取响应数据，优先使用 rawData（ProtoMsg 自动解码），然后 decodedBody（手动解码），最后 body
+      const responseBody =
+        packet.rawData !== undefined
+          ? packet.rawData
+          : packet.decodedBody !== undefined
+            ? packet.decodedBody
+            : packet.body;
 
-          promiseData.reject(
-            new Error(`服务器错误: ${packet.code} - ${errorDesc}`),
-          );
-        }
-        break;
+      // 附加原始命令名到响应对象
+      if (responseBody && typeof responseBody === "object") {
+        responseBody._originalCmd = promiseData.originalCmd;
       }
+
+      if (packet.code === 0 || packet.code === undefined) {
+        promiseData.resolve(responseBody || packet);
+      } else {
+        // 获取错误描述
+        const errorDesc =
+          errorCodeMap[packet.code] || packet.hint || "未知错误";
+
+        const err = new Error(`服务器错误: ${packet.code} - ${errorDesc}`);
+        err.code = packet.code;
+        promiseData.reject(err);
+      }
+      return;
     }
   }
 
@@ -1387,9 +1448,21 @@ export class XyzwWebSocketClient {
     const request = this.promises[requestSeq];
     if (!request) return;
     clearTimeout(request.timer);
-    delete this.promises[requestSeq];
+    this._deletePromise(requestSeq);
     this.sendQueue = this.sendQueue.filter((task) => task.seq !== requestSeq);
     request.reject(error);
+  }
+
+  /** 从等待表中移除指定请求（同步维护原始命令反向索引） */
+  _deletePromise(requestId) {
+    const data = this.promises[requestId];
+    if (!data) return;
+    const pendingSet = this._pendingByCmd[data.originalCmd];
+    if (pendingSet) {
+      pendingSet.delete(requestId);
+      if (pendingSet.size === 0) delete this._pendingByCmd[data.originalCmd];
+    }
+    delete this.promises[requestId];
   }
 
   /** Cancel the connection's requests, unsent commands and scheduled callbacks. */
@@ -1411,6 +1484,7 @@ export class XyzwWebSocketClient {
       delete this.promises[id];
       request.reject(new Error("WebSocket 连接已关闭"));
     }
+    this._pendingByCmd = Object.create(null);
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;

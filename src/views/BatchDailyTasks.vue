@@ -14,34 +14,14 @@
             gap: 12px;
           "
         >
-          <div style="display: flex; align-items: center; gap: 16px">
+          <div class="header-left">
             <h2>批量日常任务</h2>
-            <div
-              style="
-                display: flex;
-                align-items: center;
-                gap: 12px;
-                padding: 8px 12px;
-                background-color: #f8f9fa;
-                border-radius: 8px;
-                border: 1px solid #e9ecef;
-              "
-            >
+            <div class="header-info-box">
               <div style="font-size: 14px; color: #495057">
                 共 {{ scheduledTasks.length }} 个定时任务
               </div>
-              <div
-                v-if="shortestCountdownTask"
-                style="font-size: 14px; font-weight: 500; color: #1677ff"
-              >
-                即将执行：{{ shortestCountdownTask.task.name }} ({{
-                  shortestCountdownTask.countdown.formatted
-                }})
-              </div>
-              <div v-else style="font-size: 14px; color: #6c757d">
-                暂无定时任务
-              </div>
-              <div style="display: flex; gap: 8px">
+              <NextTaskBanner :tasks="scheduledTasks" />
+              <div class="header-info-actions">
                 <n-button type="primary" size="small" @click="openTaskModal">
                   新增定时任务
                 </n-button>
@@ -58,6 +38,26 @@
                 >
                   <n-button size="small">导入配置</n-button>
                 </n-upload>
+                <n-button
+                  size="small"
+                  type="info"
+                  @click="showCloudModal = true"
+                >
+                  云端定时
+                </n-button>
+              </div>
+              <div
+                class="setting-item"
+                style="
+                  flex-direction: row;
+                  justify-content: space-between;
+                  align-items: center;
+                "
+              >
+                <label class="setting-label">黑市采购清单配置</label>
+                <n-button size="small" @click="openBlackMarketPurchaseModal">
+                  点击配置
+                </n-button>
               </div>
               <div
                 class="setting-item"
@@ -74,17 +74,7 @@
               </div>
             </div>
           </div>
-          <div
-            style="
-              display: flex;
-              align-items: center;
-              gap: 12px;
-              padding: 8px 12px;
-              background-color: #f8f9fa;
-              border-radius: 8px;
-              border: 1px solid #e9ecef;
-            "
-          >
+          <div class="header-action-box">
             <n-button
               type="primary"
               @click="startBatch"
@@ -313,7 +303,11 @@
         </n-card>
 
         <!-- Batch Functions -->
-        <n-card title="批量功能列表" style="margin-top: 16px">
+        <n-card
+          title="批量功能列表"
+          class="func-tabs-card"
+          style="margin-top: 16px"
+        >
           <n-tabs type="line" animated>
             <n-tab-pane name="daily" tab="日常">
               <n-space>
@@ -400,10 +394,38 @@
                 </n-button>
                 <n-button
                   size="small"
+                  @click="batchClaimMail"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                >
+                  一键邮件领取
+                </n-button>
+                <n-button
+                  size="small"
+                  @click="batchClaimActivity"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                >
+                  一键活跃度奖励
+                </n-button>
+                <n-button
+                  size="small"
+                  @click="batchCampClaimTasks"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                >
+                  一键营地任务奖励
+                </n-button>
+                <n-button
+                  size="small"
                   @click="batchGenieSweep"
                   :disabled="isRunning || selectedTokens.length === 0"
                 >
                   一键灯神扫荡
+                </n-button>
+                <n-button
+                  size="small"
+                  @click="batchBookPKMatch"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                >
+                  一键预约比赛
                 </n-button>
                 <n-popselect
                   :value="campChallengeMode"
@@ -472,6 +494,10 @@
                 >
                   一键购买梦境商品
                 </n-button>
+              </n-space>
+            </n-tab-pane>
+            <n-tab-pane name="apex" tab="逐鹿盐山">
+              <n-space>
                 <n-popselect
                   :value="footballPick"
                   :options="footballPickOptions"
@@ -492,31 +518,26 @@
                 >
                   逐鹿盐山竞猜
                 </n-button>
-              </n-space>
-            </n-tab-pane>
-            <n-tab-pane name="baoku" tab="宝库">
-              <n-space>
                 <n-button
                   size="small"
-                  @click="batchbaoku13"
-                  :disabled="
-                    isRunning ||
-                    selectedTokens.length === 0 ||
-                    !isbaokuActivityOpen
-                  "
+                  :disabled="isRunning || selectedTokens.length === 0"
+                  @click="batchApexVote"
                 >
-                  一键宝库前3层
+                  逐鹿盐山助威
                 </n-button>
                 <n-button
                   size="small"
-                  @click="batchbaoku45"
-                  :disabled="
-                    isRunning ||
-                    selectedTokens.length === 0 ||
-                    !isbaokuActivityOpen
-                  "
+                  :disabled="isRunning || selectedTokens.length === 0"
+                  @click="batchApexClaimTask"
                 >
-                  一键宝库4,5层
+                  逐鹿盐山任务
+                </n-button>
+                <n-button
+                  size="small"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                  @click="batchApexClaimGuess"
+                >
+                  竞猜奖励领取
                 </n-button>
               </n-space>
             </n-tab-pane>
@@ -661,7 +682,7 @@
               </n-space>
             </n-tab-pane>
             <n-tab-pane name="legacy" tab="功法">
-              <n-space>
+              <n-space align="center">
                 <n-button
                   size="small"
                   @click="batchLegacyClaim"
@@ -675,6 +696,13 @@
                   :disabled="isRunning || selectedTokens.length === 0"
                 >
                   批量功法残卷赠送
+                </n-button>
+                <n-button
+                  size="small"
+                  @click="batchLegacyStartExplore"
+                  :disabled="isRunning || selectedTokens.length === 0"
+                >
+                  批量功法残卷开启
                 </n-button>
               </n-space>
             </n-tab-pane>
@@ -1716,8 +1744,8 @@
         </n-alert>
 
         <div
-          v-for="(item, itemIndex) in blackMarketPurchaseList"
-          :key="`${itemIndex}-${item.itemId ?? 'new'}`"
+          v-for="(item, index) in blackMarketPurchaseList"
+          :key="`${index}-${item.itemId ?? 'new'}`"
           style="
             display: grid;
             grid-template-columns: 220px 120px 120px 1fr 96px;
@@ -1732,9 +1760,7 @@
             placeholder="选择常用物品"
             clearable
             filterable
-            @update:value="
-              (value) => applyBlackMarketCatalogItem(itemIndex, value)
-            "
+            @update:value="(value) => applyBlackMarketCatalogItem(index, value)"
           />
           <n-input-number
             v-model:value="item.itemId"
@@ -1752,7 +1778,7 @@
           <n-button
             type="error"
             secondary
-            @click="removeBlackMarketPurchaseItem(itemIndex)"
+            @click="removeBlackMarketPurchaseItem(index)"
           >
             删除
           </n-button>
@@ -1820,20 +1846,7 @@
           </div>
           <div style="margin-bottom: 4px">
             <span style="color: #6b7280">下次执行：</span>
-            <span
-              :style="{
-                fontWeight: 'bold',
-                color: taskCountdowns[task.id]?.isNearExecution
-                  ? '#ff4d4f'
-                  : '#1677ff',
-              }"
-            >
-              {{
-                task.enabled
-                  ? taskCountdowns[task.id]?.formatted || "计算中..."
-                  : "已禁用"
-              }}
-            </span>
+            <TaskCountdown :task="task" />
           </div>
           <div style="margin-bottom: 4px">
             <span style="color: #6b7280">选中账号：</span>
@@ -1865,6 +1878,106 @@
         >
           暂无定时任务
         </div>
+      </div>
+    </n-modal>
+
+    <!-- 云端定时面板 -->
+    <n-modal
+      v-model:show="showCloudModal"
+      preset="card"
+      title="云端定时（服务端自动执行，无需保持页面打开）"
+      style="width: 92%; max-width: 640px"
+    >
+      <div class="settings-content">
+        <div class="setting-item">
+          <label class="setting-label">后端服务地址</label>
+          <n-input
+            v-model:value="cloudBackendUrl"
+            placeholder="例如 https://xyzw-backend.onrender.com"
+            clearable
+          />
+        </div>
+        <div class="setting-item">
+          <label class="setting-label">访问密钥（后端 BACKEND_KEY）</label>
+          <n-input
+            v-model:value="cloudBackendKey"
+            type="password"
+            show-password-on="click"
+            placeholder="与后端环境变量 BACKEND_KEY 一致"
+          />
+        </div>
+        <n-space>
+          <n-button
+            size="small"
+            :loading="cloudTesting"
+            @click="cloudTestConnection"
+          >
+            测试连接
+          </n-button>
+          <n-button
+            size="small"
+            type="primary"
+            :loading="cloudSyncing"
+            @click="cloudSync"
+          >
+            同步 Token 与定时任务
+          </n-button>
+          <n-button
+            size="small"
+            :loading="cloudTestResultsLoading"
+            @click="cloudTestAllTokens"
+          >
+            测试Token有效性
+          </n-button>
+          <n-button
+            size="small"
+            :loading="cloudLogLoading"
+            @click="cloudLoadLogs"
+          >
+            刷新云端日志
+          </n-button>
+        </n-space>
+        <div
+          v-if="cloudStatus"
+          class="cloud-status"
+          :style="{ color: cloudStatusOk ? '#18a058' : '#d03050' }"
+        >
+          {{ cloudStatus }}
+        </div>
+        <div v-if="cloudTestResults.length" class="cloud-test-results">
+          <div
+            v-for="r in cloudTestResults"
+            :key="r.id"
+            style="font-size: 13px; line-height: 1.8"
+          >
+            {{ r.ok ? "✅" : "❌" }} {{ r.name }}:
+            {{ r.ok ? `有效（${r.detail}）` : r.error }}
+          </div>
+        </div>
+        <div v-if="cloudLogs.length" class="cloud-logs">
+          <div v-for="(log, i) in cloudLogs" :key="i" class="cloud-log-line">
+            <span
+              :style="{
+                color:
+                  log.status === 'success'
+                    ? '#18a058'
+                    : log.status === 'error'
+                      ? '#d03050'
+                      : '#6b7280',
+              }"
+            >
+              [{{ log.created_at?.slice(5, 16).replace("T", " ") }}]
+              {{ log.token_name }} {{ log.task_type }}: {{ log.status
+              }}{{ log.message ? ` - ${log.message}` : "" }}
+            </span>
+          </div>
+        </div>
+        <n-alert type="warning" :show-icon="false" style="margin-top: 8px">
+          同步会把 Token
+          明文上传到云端数据库、定时由服务端执行。仅支持领取类任务
+          （日常礼包/挂机/爬塔/功法/活跃度/逐鹿盐山任务/珍宝阁/答题/签到/灯神），
+          其余复杂任务会在同步时跳过。
+        </n-alert>
       </div>
     </n-modal>
 
@@ -2130,10 +2243,11 @@
       v-model:show="showBatchSettingsModal"
       preset="card"
       title="任务设置"
+      class="batch-settings-modal"
       style="width: 90%; max-width: 700px"
     >
       <div class="settings-content">
-        <n-grid :cols="2" :x-gap="24">
+        <n-grid cols="1 s:2" :x-gap="24" :y-gap="24">
           <!-- 左列：批量操作设置 -->
           <n-grid-item>
             <n-divider title-placement="left" style="margin: 1px 0 8px 0"
@@ -2556,6 +2670,40 @@
           >
         </div>
       </div>
+    </n-modal>
+
+    <!-- Export text fallback modal: APK/手机 WebView 无法直接保存 blob 下载文件 -->
+    <n-modal
+      v-model:show="showExportTextModal"
+      preset="card"
+      title="导出配置内容"
+      style="width: 92%; max-width: 600px"
+    >
+      <n-space vertical>
+        <template v-if="exportRelayUrl">
+          <div style="font-size: 13px; color: #666">
+            手机上无法直接下载?复制下方链接,用系统浏览器(如 Chrome)打开即可下载
+            .json 文件:
+          </div>
+          <n-input :value="exportRelayUrl" type="textarea" readonly :rows="3" />
+          <n-space>
+            <n-button type="primary" @click="copyExportLink">
+              复制链接
+            </n-button>
+            <n-button @click="openExportLink"> 尝试下载 </n-button>
+          </n-space>
+          <n-divider style="margin: 4px 0">
+            <span style="font-size: 12px; color: #999">或复制文本内容</span>
+          </n-divider>
+        </template>
+        <div style="font-size: 13px; color: #666">
+          也可复制以下内容,自行粘贴保存为 .json 文件,之后可通过"导入配置"恢复。
+        </div>
+        <n-input :value="exportJsonText" type="textarea" readonly :rows="10" />
+        <n-button type="primary" @click="copyExportText">
+          复制全部内容
+        </n-button>
+      </n-space>
     </n-modal>
 
     <!-- War Guess Modal -->
@@ -3044,7 +3192,7 @@
 
 <script setup>
 import { Settings } from "@vicons/ionicons5";
-
+import { useLocalStorage } from "@vueuse/core";
 import { useMessage } from "naive-ui";
 // Import required dependencies
 import {
@@ -3067,7 +3215,6 @@ import {
   // Constants
   boxTypeOptions,
   calculateMonthProgress,
-  calculateNextExecutionTime,
   calculateNextRuns,
   createTasksApex,
   createTasksArena,
@@ -3079,12 +3226,12 @@ import {
   createTasksHangUp,
   createTasksItem,
   createTasksLegacy,
+  createTasksPKRoom,
   createTasksStore,
   createTasksTower,
   createTasksXuanwuBlessing,
   fishTypeOptions,
   formationOptions,
-  formatTimeDifference,
   getTodayStartSec,
   isTodayAvailable,
   matchesCronExpression,
@@ -3100,7 +3247,8 @@ import {
 import { DailyTaskRunner } from "@/utils/dailyTaskRunner";
 import { goldItemsConfig, merchantConfig } from "@/utils/dreamConstants";
 
-import { isSameGameValue } from "@/utils/gameValue.js";
+import { toBase64Url } from "@/utils/encoding";
+import { uploadForRelayUrl } from "@/utils/fileRelay";
 
 import { DEFAULT_WEIRD_TOWER_MAX_CLIMB } from "@/utils/towerClimbLimit.js";
 
@@ -3187,10 +3335,6 @@ const tokens = computed(() => tokenStore.gameTokens);
 const ismengjingActivityOpen = computed(() => {
   const day = new Date().getDay();
   return day === 0 || day === 1 || day === 3 || day === 4;
-});
-const isbaokuActivityOpen = computed(() => {
-  const day = new Date().getDay();
-  return !isSameGameValue(day, 1) && !isSameGameValue(day, 2);
 });
 const isarenaActivityOpen = computed(() => {
   const hour = new Date().getHours();
@@ -3288,7 +3432,7 @@ const warGuessActivityTip = computed(() => {
 });
 
 const selectedTokens = ref([]);
-const tokenStatus = ref({}); // { tokenId: 'waiting' | 'running' | 'completed' | 'failed' }
+const tokenStatus = ref({}); // { tokenId: 'waiting' | 'running' | 'completed' | 'failed' | 'skipped' }
 const isRunning = ref(false);
 const shouldStop = ref(false);
 
@@ -3637,6 +3781,12 @@ const helperModalTitle = computed(() => {
 // Batch Settings State
 const showBatchSettingsModal = ref(false);
 
+// 导出配置兜底:无法下载文件时展示文本供复制
+const showExportTextModal = ref(false);
+const exportJsonText = ref("");
+// 中转下载链接(真正的 https 附件下载,可复制到系统浏览器打开)
+const exportRelayUrl = ref("");
+
 const defaultDreamPurchaseList = [];
 for (const merchantId in goldItemsConfig) {
   goldItemsConfig[merchantId].forEach((index) => {
@@ -3781,7 +3931,10 @@ const taskGroupDefinitions = [
       "batchCampClaimTasks",
       "store_syncpurchaseconfig",
       "store_purchase",
+      "batchBookPKMatch",
       "collection_claimfreereward",
+      "batchClaimMail",
+      "batchClaimActivity",
       "batchGenieSweep",
       "batchXuanwuBlessing",
     ],
@@ -3797,7 +3950,16 @@ const taskGroupDefinitions = [
       "batchBuyDreamItems",
     ],
   },
-  { name: "baoku", label: "宝库", tasks: ["batchbaoku13", "batchbaoku45"] },
+  {
+    name: "apex",
+    label: "逐鹿盐山",
+    tasks: [
+      "batchApexGuess",
+      "batchApexVote",
+      "batchApexClaimTask",
+      "batchApexClaimGuess",
+    ],
+  },
   {
     name: "weirdTower",
     label: "怪异塔",
@@ -3857,6 +4019,8 @@ const groupedAvailableTasks = computed(() => {
 // Cron表达式解析相关变量
 const cronValidation = ref({ valid: true, message: "" });
 const cronNextRuns = ref([]);
+
+// 注: availableTasks, taskColumns 已从 @/utils/batch 导入
 
 // ======================
 // Scheduled Tasks Storage
@@ -4141,6 +4305,255 @@ const selectAllTokens = () => {
   taskForm.selectedTokens = tokens.value.map((token) => token.id);
 };
 
+// ======================
+// 云端定时（服务端执行）
+// ======================
+
+// 页面任务 → 云端 TASK_DEFINITIONS key 映射；未列入的复杂任务云端不支持
+const CLOUD_TASK_MAP = {
+  startBatch: "dailyBundle",
+  claimHangUpRewards: "claimHangup",
+  climbTower: "climbTower",
+  climbWeirdTower: "climbWeirdTower",
+  batchStudy: "studyGame",
+  batchclubsign: "legionSignIn",
+  batchGenieSweep: "genieSweep",
+  collection_claimfreereward: "collectionClaim",
+  store_purchase: "blackMarketPurchase",
+  batchCampClaimTasks: "campTaskClaim",
+  batchLegacyClaim: "legacyHangup",
+  batchClaimActivity: "activity",
+  batchApexClaimTask: "apexTask",
+};
+
+const showCloudModal = ref(false);
+const cloudBackendUrl = useLocalStorage("cloudBackendUrl", "");
+const cloudBackendKey = useLocalStorage("cloudBackendKey", "");
+const cloudTesting = ref(false);
+const cloudSyncing = ref(false);
+const cloudLogLoading = ref(false);
+const cloudTestResultsLoading = ref(false);
+const cloudStatus = ref("");
+const cloudStatusOk = ref(false);
+const cloudTestResults = ref([]);
+const cloudLogs = ref([]);
+
+/** 与 tokenStore 的 parseBase64Token 相同的 actualToken 提取逻辑 */
+const extractActualToken = (base64String) => {
+  try {
+    const clean = String(base64String || "")
+      .replace(/^data:.*base64,/, "")
+      .trim();
+    if (!clean) return "";
+    let decoded;
+    try {
+      decoded = atob(clean);
+    } catch {
+      decoded = clean;
+    }
+    try {
+      const data = JSON.parse(decoded);
+      return String(data.token || data.gameToken || decoded);
+    } catch {
+      return decoded;
+    }
+  } catch {
+    return "";
+  }
+};
+
+const cloudHeaders = () => ({
+  "Content-Type": "application/json",
+  "x-backend-key": cloudBackendKey.value,
+});
+
+const cloudTestConnection = async () => {
+  if (!cloudBackendUrl.value || !cloudBackendKey.value) {
+    cloudStatusOk.value = false;
+    cloudStatus.value = "请先填写后端地址与访问密钥";
+    return;
+  }
+  cloudTesting.value = true;
+  cloudStatus.value = "";
+  try {
+    const resp = await fetch(
+      `${cloudBackendUrl.value.replace(/\/$/, "")}/health`,
+    );
+    const data = await resp.json();
+    cloudStatusOk.value = resp.ok;
+    cloudStatus.value = resp.ok
+      ? `连接成功，云端已注册 ${data.activeCrons} 个定时任务`
+      : `连接失败: HTTP ${resp.status}`;
+  } catch (err) {
+    cloudStatusOk.value = false;
+    cloudStatus.value = `连接失败: ${err.message}`;
+  } finally {
+    cloudTesting.value = false;
+  }
+};
+
+const cloudSync = async () => {
+  if (!cloudBackendUrl.value || !cloudBackendKey.value) {
+    cloudStatusOk.value = false;
+    cloudStatus.value = "请先填写后端地址与访问密钥";
+    return;
+  }
+
+  const skippedTypes = new Set();
+  let cronParseFailed = 0;
+  const schedules = [];
+  for (const task of scheduledTasks.value) {
+    const selectedTasks = (task.selectedTasks || [])
+      .map((v) => CLOUD_TASK_MAP[v])
+      .filter(Boolean);
+    (task.selectedTasks || []).forEach((v) => {
+      if (!CLOUD_TASK_MAP[v]) skippedTypes.add(v);
+    });
+    const selectedTokens = (task.selectedTokens || []).filter((id) =>
+      tokens.value.some((t) => t.id === id),
+    );
+    if (selectedTasks.length === 0 || selectedTokens.length === 0) continue;
+
+    let cronExpr = task.cronExpression || "";
+    if (task.runType === "daily") {
+      // runTime 存的是 "00:10:00" 文本（toLocaleTimeString）或时间戳，统一提取时分
+      const m = String(task.runTime || "").match(/(\d{1,2}):(\d{2})/);
+      if (!m) {
+        cronParseFailed += 1;
+        continue;
+      }
+      const hh = String(Number(m[1])).padStart(2, "0");
+      cronExpr = `0 ${m[2]} ${hh} * * *`;
+    }
+    if (!cronExpr) {
+      cronParseFailed += 1;
+      continue;
+    }
+    schedules.push({
+      name: task.name,
+      cron_expr: cronExpr,
+      selected_tasks: selectedTasks,
+      selected_tokens: selectedTokens,
+      enabled: task.enabled !== false,
+    });
+  }
+
+  const tokenRows = tokens.value
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+      token: extractActualToken(t.token),
+    }))
+    .filter((t) => t.token);
+
+  if (schedules.length === 0) {
+    cloudStatusOk.value = false;
+    const hints = [];
+    if (cronParseFailed)
+      hints.push(
+        `${cronParseFailed} 个任务的运行时间无法解析（请重新编辑保存一次定时任务）`,
+      );
+    if (skippedTypes.size)
+      hints.push(
+        `${[...skippedTypes]
+          .map((v) => availableTasks.find((t) => t.value === v)?.label || v)
+          .join("、")} 等复杂任务云端暂不支持`,
+      );
+    cloudStatus.value = `没有可同步的定时任务${hints.length ? `：${hints.join("；")}` : ""}`;
+    return;
+  }
+
+  cloudSyncing.value = true;
+  cloudStatus.value = "";
+  try {
+    const resp = await fetch(
+      `${cloudBackendUrl.value.replace(/\/$/, "")}/api/sync`,
+      {
+        method: "POST",
+        headers: cloudHeaders(),
+        body: JSON.stringify({ tokens: tokenRows, schedules }),
+      },
+    );
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    cloudStatusOk.value = true;
+    cloudStatus.value =
+      `同步成功：${data.tokens} 个 Token、${data.schedules} 个定时任务已上传` +
+      `，云端已注册 ${data.activeCrons} 个定时器`;
+    if (data.failed?.length) {
+      cloudStatus.value += `。注册失败：${data.failed
+        .map((f) => `${f.name}（${f.reason}）`)
+        .join("、")}`;
+    }
+    if (skippedTypes.size) {
+      const labels = [...skippedTypes]
+        .map((v) => availableTasks.find((t) => t.value === v)?.label || v)
+        .join("、");
+      cloudStatus.value += `。以下任务云端暂不支持已跳过：${labels}`;
+    }
+  } catch (err) {
+    cloudStatusOk.value = false;
+    cloudStatus.value = `同步失败: ${err.message}`;
+  } finally {
+    cloudSyncing.value = false;
+  }
+};
+
+const cloudLoadLogs = async () => {
+  cloudLogLoading.value = true;
+  try {
+    const resp = await fetch(
+      `${cloudBackendUrl.value.replace(/\/$/, "")}/api/logs/db?limit=80`,
+      { headers: cloudHeaders() },
+    );
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+    cloudLogs.value = Array.isArray(data) ? data : [];
+    if (cloudLogs.value.length === 0) {
+      cloudStatusOk.value = true;
+      cloudStatus.value = "云端暂无执行日志（可能尚未到执行时间）";
+    }
+  } catch (err) {
+    cloudStatusOk.value = false;
+    cloudStatus.value = `日志获取失败: ${err.message}`;
+  } finally {
+    cloudLogLoading.value = false;
+  }
+};
+
+// 批量测试云端所有 Token 的有效性
+const cloudTestAllTokens = async () => {
+  cloudTestResultsLoading.value = true;
+  cloudTestResults.value = [];
+  try {
+    for (const t of tokens.value) {
+      try {
+        const resp = await fetch(
+          `${cloudBackendUrl.value.replace(/\/$/, "")}/api/tokens/${t.id}/test`,
+          { method: "POST", headers: cloudHeaders() },
+        );
+        const data = await resp.json();
+        cloudTestResults.value.push({
+          id: t.id,
+          name: t.name,
+          ok: data.ok,
+          error: data.error,
+          detail: data.ok ? `${data.name || "?"} Lv.${data.level ?? "?"}` : "",
+        });
+      } catch (err) {
+        cloudTestResults.value.push({
+          id: t.id,
+          name: t.name,
+          ok: false,
+          error: err.message,
+        });
+      }
+    }
+  } finally {
+    cloudTestResultsLoading.value = false;
+  }
+};
+
 // Deselect all tokens
 const deselectAllTokens = () => {
   taskForm.selectedTokens = [];
@@ -4161,7 +4574,7 @@ const deselectAllTasks = () => {
 // ======================
 
 // Export all tokens and scheduled tasks configuration
-const exportConfig = () => {
+const exportConfig = async () => {
   try {
     // Get all valid token IDs
     const validTokenIds = new Set(tokens.value.map((t) => t.id));
@@ -4229,17 +4642,53 @@ const exportConfig = () => {
       tokenSettings,
     };
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: "application/json",
-    });
+    const json = JSON.stringify(exportData, null, 2);
+    const filename = `xyzw_config_${new Date().toISOString().slice(0, 10)}.json`;
+    const blob = new Blob([json], { type: "application/json" });
+
+    // 生成中转下载链接:小文件直接编码进 URL,大文件走上传中转
+    exportRelayUrl.value = "";
+    try {
+      if (location.protocol.startsWith("http") && typeof btoa === "function") {
+        if (blob.size <= 60 * 1024) {
+          exportRelayUrl.value = `${location.origin}/api/download-file?n=${encodeURIComponent(filename)}&d=${toBase64Url(await blob.arrayBuffer())}`;
+        } else if (blob.size <= 8 * 1024 * 1024) {
+          exportRelayUrl.value = await uploadForRelayUrl(filename, blob);
+        }
+      }
+    } catch (e) {
+      exportRelayUrl.value = "";
+    }
+
+    // 手机/APK 的 WebView 无法把 blob 下载落盘:
+    // 优先调起系统分享(可"保存到文件"),不支持时展示文本供复制
+    const file = new File([blob], filename, { type: "application/json" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: filename });
+        message.success("已调起系统分享,可选择保存到文件或发送给其他设备");
+      } catch (e) {
+        if (e && e.name === "AbortError") return;
+        exportJsonText.value = json;
+        showExportTextModal.value = true;
+      }
+      return;
+    }
+
+    if (/Android|iPhone|iPad|Mobi/i.test(navigator.userAgent)) {
+      exportJsonText.value = json;
+      showExportTextModal.value = true;
+      return;
+    }
+
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `xyzw_config_${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 
     message.success(
       `导出成功: ${exportData.tokens.length} 个账号, ${exportData.scheduledTasks.length} 个定时任务`,
@@ -4248,6 +4697,62 @@ const exportConfig = () => {
     console.error("Export failed:", error);
     message.error(`导出失败: ${error.message}`);
   }
+};
+
+// 复制文本到剪贴板(先同步 execCommand——必须在用户手势内执行;WebView 的 async clipboard 常被拒绝)
+const copyTextWithFeedback = async (text) => {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.top = "-9999px";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  let copied = false;
+  try {
+    ta.focus();
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    copied = document.execCommand("copy");
+  } catch (e) {
+    copied = false;
+  } finally {
+    document.body.removeChild(ta);
+  }
+  if (copied) return true;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return await navigator.clipboard
+        .writeText(text)
+        .then(() => true)
+        .catch(() => false);
+    }
+  } catch (e) {
+    // ignore
+  }
+  return false;
+};
+
+const copyExportText = async () => {
+  const ok = await copyTextWithFeedback(exportJsonText.value);
+  if (ok) {
+    message.success("配置内容已复制到剪贴板");
+  } else {
+    message.info("自动复制失败,请长按文本框手动全选复制");
+  }
+};
+
+const copyExportLink = async () => {
+  const ok = await copyTextWithFeedback(exportRelayUrl.value);
+  if (ok) {
+    message.success("链接已复制,请用系统浏览器打开下载");
+  } else {
+    message.info("自动复制失败,请长按链接手动复制");
+  }
+};
+
+const openExportLink = () => {
+  location.href = exportRelayUrl.value;
 };
 
 // Import tokens and scheduled tasks configuration
@@ -4358,81 +4863,8 @@ const importConfig = async ({ file }) => {
 // Scheduled Tasks Countdown
 // ======================
 
-// 注: parseCronField, calculateNextExecutionTime, formatTimeDifference 已从 @/utils/batch 导入
-
-// Task countdowns ref
-const taskCountdowns = ref({});
-const nextExecutionTimes = ref({});
-
-// Update countdowns for all tasks
-const updateCountdowns = () => {
-  const now = Date.now();
-
-  scheduledTasks.value.forEach((task) => {
-    if (!task.enabled) {
-      // Clear countdown for disabled tasks
-      delete taskCountdowns.value[task.id];
-      return;
-    }
-
-    if (
-      !nextExecutionTimes.value[task.id] ||
-      nextExecutionTimes.value[task.id] <= now
-    ) {
-      // Calculate next execution time if not set or passed
-      nextExecutionTimes.value[task.id] = calculateNextExecutionTime(task);
-    }
-
-    if (nextExecutionTimes.value[task.id]) {
-      const timeDiff = nextExecutionTimes.value[task.id] - now;
-      taskCountdowns.value[task.id] = {
-        remainingTime: Math.max(0, timeDiff),
-        formatted: formatTimeDifference(Math.max(0, timeDiff)),
-        isNearExecution: timeDiff < 5 * 60 * 1000, // Less than 5 minutes
-      };
-    }
-  });
-};
-
-// 计算最短倒计时任务
-const shortestCountdownTask = computed(() => {
-  if (scheduledTasks.value.length === 0) return null;
-
-  let shortestTask = null;
-  let shortestTime = Infinity;
-
-  // 遍历所有任务，找到倒计时最短的任务
-  scheduledTasks.value.forEach((task) => {
-    if (!task.enabled) return;
-
-    const countdown = taskCountdowns.value[task.id];
-    if (countdown && countdown.remainingTime < shortestTime) {
-      shortestTime = countdown.remainingTime;
-      shortestTask = {
-        task,
-        countdown,
-      };
-    }
-  });
-
-  return shortestTask;
-});
-
-// Start countdown interval
-let countdownInterval = null;
-
-const startCountdown = () => {
-  // Clear any existing interval
-  if (countdownInterval) {
-    clearInterval(countdownInterval);
-  }
-
-  // Update countdowns immediately
-  updateCountdowns();
-
-  // Update countdowns every second
-  countdownInterval = setInterval(updateCountdowns, 1000);
-};
+// 注: 倒计时展示已隔离到 Daily/TaskCountdown.vue 与 Daily/NextTaskBanner.vue，
+// 每秒刷新只在叶子组件内发生，避免本组件（约 7000 行）整体重渲染
 
 // ======================
 // Scheduled Tasks Scheduler
@@ -4440,18 +4872,6 @@ const startCountdown = () => {
 
 // Initialize scheduled tasks from localStorage
 loadScheduledTasks();
-
-// Watch for changes to scheduledTasks for debugging
-watch(
-  scheduledTasks,
-  () => {
-    // Reset countdowns when tasks change
-    nextExecutionTimes.value = {};
-    taskCountdowns.value = {};
-    updateCountdowns();
-  },
-  { deep: true },
-);
 
 // 修复TimePicker的"Invalid time value"错误：确保runTime的初始值不是null
 watch(
@@ -4621,20 +5041,12 @@ const handleTokenRefreshWaiting = (data) => {
 onMounted(() => {
   // Start the task scheduler after all functions are initialized
   scheduleTaskExecution();
-  // Start countdown timer
-  startCountdown();
   loadTaskTemplates();
   // 监听Token刷新等待事件
   $emit.on("token:refresh:waiting", handleTokenRefreshWaiting);
 });
 
-// Cleanup countdown interval on unmount
 onBeforeUnmount(() => {
-  if (countdownInterval) {
-    clearInterval(countdownInterval);
-    countdownInterval = null;
-  }
-
   // 移除Token刷新等待事件监听
   $emit.off("token:refresh:waiting", handleTokenRefreshWaiting);
 
@@ -4697,8 +5109,6 @@ function getScheduledTask(taskName) {
     batchFish,
     batchRecruit,
     batchRedeemCodes,
-    batchbaoku13,
-    batchbaoku45,
     batchmengjing,
     batchclubsign,
     batchCampChallenge,
@@ -4722,6 +5132,8 @@ function getScheduledTask(taskName) {
     batchGenieSweep,
     batchBuyDreamItems,
     batchXuanwuBlessing,
+    batchBookPKMatch,
+    batchClaimMail,
   };
   return Object.hasOwn(tasks, taskName) ? tasks[taskName] : undefined;
 }
@@ -4869,18 +5281,6 @@ const executeScheduledTask = async (task) => {
     // Task types share account connections and run state; account-level concurrency stays inside each task.
     for (const taskName of task.selectedTasks) {
       if (shouldStop.value) break;
-
-      if (
-        ["batchbaoku45", "batchbaoku13"].includes(taskName) &&
-        !isbaokuActivityOpen.value
-      ) {
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `跳过任务: ${availableTasks.find((t) => t.value === taskName)?.label || taskName} (不在宝库开放时间)`,
-          type: "warning",
-        });
-        continue;
-      }
 
       if (
         ["batchmengjing", "batchBuyDreamItems"].includes(taskName) &&
@@ -5689,6 +6089,7 @@ const getStatusType = (tokenId) => {
   if (status === "completed") return "success";
   if (status === "failed") return "error";
   if (status === "running") return "info";
+  if (status === "skipped") return "warning";
   return "default";
 };
 
@@ -5699,6 +6100,7 @@ const getStatusText = (tokenId) => {
   if (status === "stopped") return "已停止";
   if (status === "pending") return "待继续";
   if (status === "running") return "执行中";
+  if (status === "skipped") return "已跳过";
   return "等待中";
 };
 
@@ -5915,7 +6317,7 @@ watch(autoScrollLog, (newValue) => {
   }
 });
 
-const copyLogs = () => {
+const copyLogs = async () => {
   if (logs.value.length === 0) {
     message.warning("没有可复制的日志");
     return;
@@ -5923,14 +6325,12 @@ const copyLogs = () => {
   const logText = logs.value
     .map((log) => `${log.time} ${log.message}`)
     .join("\n");
-  navigator.clipboard
-    .writeText(logText)
-    .then(() => {
-      message.success("日志已复制到剪贴板");
-    })
-    .catch((err) => {
-      message.error(`复制日志失败: ${err.message}`);
-    });
+  const ok = await copyTextWithFeedback(logText);
+  if (ok) {
+    message.success("日志已复制到剪贴板");
+  } else {
+    message.error("复制日志失败");
+  }
 };
 
 const clearLogs = () => {
@@ -6169,8 +6569,7 @@ const {
 } = tasksItem;
 
 const tasksDungeon = createTasksDungeon(createTaskDeps());
-const { batchbaoku13, batchbaoku45, batchmengjing, batchBuyDreamItems } =
-  tasksDungeon;
+const { batchmengjing, batchBuyDreamItems } = tasksDungeon;
 
 const tasksArena = createTasksArena(createTaskDeps());
 const { batcharenafight, batchTopUpFish, batchTopUpArena } = tasksArena;
@@ -6182,22 +6581,37 @@ const {
   store_syncpurchaseconfig,
   store_purchase,
   collection_claimfreereward,
+  batchClaimActivity,
+  batchClaimMail,
 } = tasksStore;
 
 const tasksLegacy = createTasksLegacy(createTaskDeps());
-const { batchLegacyClaim, batchLegacyGiftSendEnhanced } = tasksLegacy;
+const {
+  batchLegacyClaim,
+  batchLegacyStartExplore,
+  batchLegacyGiftSendEnhanced,
+} = tasksLegacy;
 
 const tasksFootball = createTasksFootball(createTaskDeps());
 const { batchFootballBet } = tasksFootball;
 
 const tasksApex = createTasksApex(createTaskDeps());
-const { batchApexGuess } = tasksApex;
+const {
+  batchApexGuess,
+  batchApexVote,
+  batchApexClaimTask,
+  batchApexClaimGuess,
+} = tasksApex;
 
 const tasksCampChallenge = createTasksCampChallenge(createTaskDeps());
 const { batchCampChallenge, batchCampChallengePet, batchCampClaimTasks } =
   tasksCampChallenge;
+
 const tasksXuanwuBlessing = createTasksXuanwuBlessing(createTaskDeps());
 const { batchXuanwuBlessing } = tasksXuanwuBlessing;
+
+const tasksPKRoom = createTasksPKRoom(createTaskDeps());
+const { batchBookPKMatch } = tasksPKRoom;
 
 // 营地挑战模式选择
 const campChallengeMode = ref("pet");
@@ -6385,6 +6799,33 @@ const stopBatch = () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.header-left h2 {
+  white-space: nowrap;
+}
+
+.header-info-box,
+.header-action-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.header-info-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .token-item {
@@ -6619,7 +7060,7 @@ const stopBatch = () => {
     padding: 12px;
     height: 100vh;
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
   }
 
   .main-layout {
@@ -6645,6 +7086,88 @@ const stopBatch = () => {
     flex-direction: column;
     gap: 12px;
     align-items: stretch;
+  }
+
+  /* 手机端:工具条允许换行,避免内容被裁剪无法横向滑动 */
+  .header-left {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .header-info-box,
+  .header-action-box {
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .header-info-actions {
+    flex-wrap: wrap;
+  }
+
+  /* 手机端:页签改为紧凑按钮,流式排布放不下自动换行(七个一行放得下) */
+  .func-tabs-card :deep(.n-card__content) {
+    padding: 12px;
+  }
+
+  .func-tabs-card :deep(.n-tabs .n-tabs-wrapper) {
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 8px;
+    /* 占满整行,否则容器按内容收缩靠左,justify-content: center 不生效 */
+    width: 100%;
+  }
+
+  /* 收紧页签间距,隐藏原生指示条与导航底边线,避免与按钮重叠 */
+  .func-tabs-card :deep(.n-tabs .n-tabs-tab-pad) {
+    width: 4px;
+  }
+
+  .func-tabs-card :deep(.n-tabs .n-tabs-scroll-padding),
+  .func-tabs-card :deep(.n-tabs .n-tabs-bar) {
+    display: none;
+  }
+
+  /* 页签已一排放下,隐藏两端滚动渐变遮罩(旧版滑动后的残留状态) */
+  .func-tabs-card :deep(.n-tabs .n-tabs-nav-scroll-wrapper::before),
+  .func-tabs-card :deep(.n-tabs .n-tabs-nav-scroll-wrapper::after) {
+    display: none;
+  }
+
+  /* naive-ui 样式为运行时注入、晚于本文件加载,需 !important 才能覆盖其底边线 */
+  .func-tabs-card :deep(.n-tabs .n-tabs-nav-scroll-content) {
+    border-bottom: none !important;
+  }
+
+  .func-tabs-card :deep(.n-tabs .n-tabs-tab) {
+    padding: 6px 3px;
+    font-size: 13px;
+    border: 1px solid var(--border-color, #efeff5);
+    border-radius: 8px;
+    background-color: var(--bg-tertiary, #f7f7fa);
+  }
+
+  .func-tabs-card :deep(.n-tabs .n-tabs-tab--active) {
+    border-color: var(--n-bar-color, #18a058);
+    background-color: var(--primary-color-light, rgba(24, 160, 88, 0.12));
+  }
+
+  /* 手机端:任务设置弹窗单列布局,输入框加宽,弹窗体内部滚动 */
+  .batch-settings-modal {
+    max-height: 92vh;
+  }
+
+  .batch-settings-modal :deep(.n-card__content) {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px 16px;
+  }
+
+  .batch-settings-modal :deep(.n-input-number),
+  .batch-settings-modal :deep(.n-select) {
+    width: 130px !important;
+    flex-shrink: 0;
   }
 
   .page-header .actions {

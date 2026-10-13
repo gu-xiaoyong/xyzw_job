@@ -1,4 +1,5 @@
 import { g_utils } from "@/utils/bonProtocol";
+import { toBase64Url } from "@/utils/encoding";
 
 type BinaryData = ArrayBuffer | Uint8Array;
 
@@ -14,6 +15,103 @@ function toArrayBuffer(data: BinaryData): ArrayBuffer {
     data.byteOffset,
     data.byteOffset + data.byteLength,
   ) as ArrayBuffer;
+}
+
+/**
+ * WebView 内无法直接保存下载文件时的兜底弹层:
+ * 提供一个真正的 https 下载链接(数据经 /api/download-file 中转),
+ * 可复制到系统浏览器打开下载,或尝试在当前环境直接下载。
+ */
+function showBinRelayDialog(fileName: string, relayUrl: string) {
+  const existing = document.getElementById("bin-download-fallback");
+  if (existing) existing.remove();
+
+  const wrap = document.createElement("div");
+  wrap.id = "bin-download-fallback";
+  wrap.style.cssText =
+    "position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:24px;";
+
+  const card = document.createElement("div");
+  card.style.cssText =
+    "background:#fff;border-radius:12px;padding:18px;max-width:420px;width:100%;font-family:system-ui,sans-serif;font-size:14px;color:#333;box-sizing:border-box;";
+
+  const title = document.createElement("div");
+  title.textContent = "无法在当前环境直接保存文件";
+  title.style.cssText = "font-weight:600;font-size:16px;margin-bottom:8px;";
+
+  const desc = document.createElement("div");
+  desc.style.cssText = "line-height:1.6;margin-bottom:10px;";
+  desc.append(
+    "可复制下方链接,用系统浏览器(如 Chrome)打开即可下载 ",
+    Object.assign(document.createElement("b"), { textContent: fileName }),
+    "。",
+  );
+
+  const input = document.createElement("textarea");
+  input.value = relayUrl;
+  input.readOnly = true;
+  input.style.cssText =
+    "width:100%;height:80px;box-sizing:border-box;font-size:12px;padding:8px;border-radius:8px;border:1px solid #ddd;resize:none;";
+
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;gap:8px;margin-top:12px;";
+
+  const mkBtn = (text: string, bg: string, color: string) => {
+    const b = document.createElement("button");
+    b.textContent = text;
+    b.style.cssText = `flex:1;padding:10px 0;border:none;border-radius:8px;font-size:14px;background:${bg};color:${color};`;
+    return b;
+  };
+
+  const copyBtn = mkBtn("复制链接", "#18a058", "#fff");
+  const openBtn = mkBtn("尝试下载", "#2080f0", "#fff");
+  const closeBtn = mkBtn("关闭", "#eeeeee", "#555555");
+
+  const doCopy = (): boolean => {
+    // 必须在用户手势内同步执行;WebView 的 async clipboard 常被拒绝
+    try {
+      input.focus();
+      input.select();
+      input.setSelectionRange(0, relayUrl.length);
+      return document.execCommand("copy");
+    } catch (e) {
+      return false;
+    }
+  };
+
+  copyBtn.onclick = () => {
+    if (doCopy()) {
+      copyBtn.textContent = "已复制";
+      setTimeout(() => (copyBtn.textContent = "复制链接"), 2000);
+      return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard
+        .writeText(relayUrl)
+        .then(() => {
+          copyBtn.textContent = "已复制";
+          setTimeout(() => (copyBtn.textContent = "复制链接"), 2000);
+        })
+        .catch(() => {
+          copyBtn.textContent = "复制失败,请长按链接手动复制";
+        });
+      return;
+    }
+    copyBtn.textContent = "复制失败,请长按链接手动复制";
+  };
+  openBtn.onclick = () => {
+    location.href = relayUrl;
+  };
+  const close = () => wrap.remove();
+  closeBtn.onclick = close;
+  wrap.onclick = (e) => {
+    if (e.target === wrap) close();
+  };
+
+  row.append(copyBtn, openBtn, closeBtn);
+  card.append(title, desc, input, row);
+  wrap.appendChild(card);
+  document.body.appendChild(wrap);
 }
 
 /** Extract the login envelope carried by a BIN file. */
@@ -66,16 +164,73 @@ export function getRoleBinFileName({
   return `bin-${server}服-${roleIndex}-${safeRoleId}-${safeName}.bin`;
 }
 
-export function downloadBinFile(fileName: string, data: BinaryData) {
+export type BinDownloadResult = "shared" | "downloaded" | "cancelled";
+
+/**
+ * 下载 BIN 文件。
+ * 手机/APK 的 WebView 不会处理 blob 下载(静默失败),因此优先调起系统分享
+ * (分享面板中可"保存到文件"),不支持分享时退回普通下载,移动端附加提示。
+ */
+export async function downloadBinFile(
+  fileName: string,
+  data: BinaryData,
+): Promise<BinDownloadResult> {
   const blob = new Blob([toArrayBuffer(data)], {
     type: "application/octet-stream",
   });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+
+  const triggerDownload = () => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const nav = navigator as Navigator & {
+    canShare?: (data: ShareData) => boolean;
+  };
+  if (nav.canShare) {
+    const file = new File([blob], fileName, {
+      type: "application/octet-stream",
+    });
+    if (nav.canShare({ files: [file] })) {
+      try {
+        await nav.share({ files: [file], title: fileName });
+        return "shared";
+      } catch (e: any) {
+        if (e && e.name === "AbortError") return "cancelled";
+        // 分享调起失败,退回普通下载
+      }
+    }
+  }
+
+  triggerDownload();
+
+  if (/Android|iPhone|iPad|Mobi/i.test(navigator.userAgent)) {
+    let relayUrl = "";
+    try {
+      if (
+        location.protocol.startsWith("http") &&
+        blob.size <= 64 * 1024 &&
+        typeof btoa === "function"
+      ) {
+        relayUrl = `${location.origin}/api/download-file?n=${encodeURIComponent(fileName)}&d=${toBase64Url(await blob.arrayBuffer())}`;
+      }
+    } catch (e) {
+      relayUrl = "";
+    }
+    if (relayUrl) {
+      showBinRelayDialog(fileName, relayUrl);
+    } else {
+      // eslint-disable-next-line no-alert -- 独立下载页兜底提示，无 UI 框架可用，需阻断式告知
+      window.alert(
+        "已尝试下载。如果没有生成文件(常见于 App 内置浏览器),请复制本页地址到系统浏览器打开后重新下载。",
+      );
+    }
+  }
+  return "downloaded";
 }

@@ -16,56 +16,65 @@ import { normalizeWeirdTowerMaxClimb } from "../towerClimbLimit.js";
  *
  * @param {object} tokenStore - token store
  * @param {string} tokenId - token id
- * @param {object} evoTower - evotower_getinfo 返回的 evoTower 对象
  * @param {Function} onLog - 日志回调 (message, type) => void
  * @returns {Promise<number>} 实际补领的章节数
  */
-async function claimPendingEvoTowerRewards(
-  tokenStore,
-  tokenId,
-  evoTower,
-  onLog,
-) {
-  const towerId = Number(evoTower?.towerId ?? 0);
-  const rewardTowerId = Number(evoTower?.rewardTowerId ?? 0);
-  if (!towerId) {
-    return 0;
-  }
-
-  const clearedChapter = Math.floor(towerId / 10);
-  let pending = clearedChapter - rewardTowerId;
-  if (pending <= 0) {
-    return 0;
-  }
-
-  onLog?.(
-    `检测到 ${pending} 个未领取的章节通关奖励（已通关第 ${clearedChapter} 章，已领至第 ${rewardTowerId} 章），先行补领`,
-    "warning",
-  );
-
+async function claimPendingEvoTowerRewards(tokenStore, tokenId, onLog) {
   let claimed = 0;
-  while (pending > 0) {
+  for (let i = 0; i < 40; i++) {
+    // 限频(400340)时 getinfo 会集中失败,重试几次等限频窗口过去:
+    // 否则章节奖励领不了,后续 readyfight 会被 12200020(层次奖励未领取)拒绝
+    let info = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        info = await tokenStore.sendMessageWithPromise(
+          tokenId,
+          "evotower_getinfo",
+          {},
+          5000,
+        );
+        break;
+      } catch (e) {
+        onLog?.(
+          `读取怪异塔信息失败(${attempt}/3): ${e?.message || e}`,
+          attempt >= 3 ? "error" : "warning",
+        );
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 3000));
+      }
+    }
+    if (!info) return claimed;
+    const tower = info?.evoTower || {};
+    const towerId = Number(tower.towerId ?? 0);
+    const rewardTowerId = Number(tower.rewardTowerId ?? 0);
+    if (!towerId) return claimed;
+
+    // 以服务器状态为准:已通关章节数 - 已领奖章节数
+    const pending = Math.floor(towerId / 10) - rewardTowerId;
+    if (pending <= 0) return claimed;
+
     try {
-      const res = await tokenStore.sendMessageWithPromise(
+      await tokenStore.sendMessageWithPromise(
         tokenId,
         "evotower_claimreward",
         {},
         5000,
       );
       claimed++;
-      pending--;
       onLog?.(
-        `已领取第 ${res?.evoTower?.rewardTowerId ?? rewardTowerId + claimed} 章通关奖励`,
+        `已领取第 ${rewardTowerId + 1}/${Math.floor(towerId / 10)} 章通关奖励`,
         "success",
       );
       await new Promise((r) => setTimeout(r, 300));
     } catch (error) {
-      // 领奖失败则停止：继续爬塔只会持续返回 12200020
       onLog?.(
-        `领取章节奖励失败，已补领 ${claimed}/${claimed + pending} 个：${error?.message || error}`,
+        `领取章节奖励失败 (towerId=${towerId}, rewardTowerId=${rewardTowerId}): ${error?.message || error}`,
         "error",
       );
-      break;
+      onLog?.(
+        `怪异塔原始数据: ${JSON.stringify(tower).slice(0, 500)}`,
+        "warning",
+      );
+      return claimed;
     }
   }
   return claimed;
@@ -223,10 +232,13 @@ export function createTasksTower(deps) {
               }
             }
           } catch (err) {
-            if (err.message && err.message.includes("200400")) {
+            if (
+              err.message &&
+              (err.message.includes("200400") || err.message.includes("400340"))
+            ) {
               addLog({
                 time: new Date().toLocaleTimeString(),
-                message: `${token.name} 操作过快 (200400)，等待5秒后重试...`,
+                message: `${token.name} 操作过快/被限频，等待5秒后重试...`,
                 type: "warning",
               });
               await new Promise((r) => setTimeout(r, 5000));
@@ -331,7 +343,7 @@ export function createTasksTower(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -437,7 +449,6 @@ export function createTasksTower(deps) {
         await claimPendingEvoTowerRewards(
           tokenStore,
           tokenId,
-          evotowerinfo1?.evoTower,
           (message, type) =>
             addLog({
               time: new Date().toLocaleTimeString(),
@@ -451,12 +462,21 @@ export function createTasksTower(deps) {
           weirdTowerMaxClimb?.value ?? weirdTowerMaxClimb,
         );
         let consecutiveFailures = 0;
+        let consecutiveRateLimit = 0;
+        let lastFloor = Number(evotowerinfo1?.evoTower?.towerId ?? 0);
+        let stopReason = "";
+        let freeEnergyTried = false;
 
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `${token.name} 本次最多爬怪异塔 ${MAX_CLIMB} 次`,
+          message: `${token.name} 当前第 ${lastFloor} 层，本次最多爬 ${MAX_CLIMB} 次`,
           type: "info",
         });
+
+        // 多账号并行爬塔时随机错开起跑,降低整点齐发触发服务器限频(400340)的概率
+        await new Promise((r) =>
+          setTimeout(r, Math.floor(Math.random() * 3000)),
+        );
 
         while (currentEnergy > 0 && count < MAX_CLIMB && !shouldStop.value) {
           try {
@@ -479,20 +499,23 @@ export function createTasksTower(deps) {
 
             count++;
             consecutiveFailures = 0;
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `${token.name} 爬怪异塔第 ${count} 次`,
-              type: "info",
-            });
+            consecutiveRateLimit = 0;
 
             await new Promise((r) => setTimeout(r, 500));
 
-            const evotowerinfo2 = await tokenStore.sendMessageWithPromise(
-              tokenId,
-              "evotower_getinfo",
-              {},
-              5000,
-            );
+            // 战斗已结算;此处读塔信息若被限频(400340)等失败,不应计为战斗失败,
+            // 只跳过本轮每日任务/章节奖励领取,层数体力由下方刷新兜底
+            let evotowerinfo2 = null;
+            try {
+              evotowerinfo2 = await tokenStore.sendMessageWithPromise(
+                tokenId,
+                "evotower_getinfo",
+                {},
+                5000,
+              );
+            } catch (e) {
+              // 读取失败不影响本场战斗结果
+            }
 
             // 检查并领取每日任务奖励
             if (
@@ -538,7 +561,6 @@ export function createTasksTower(deps) {
             await claimPendingEvoTowerRewards(
               tokenStore,
               tokenId,
-              evotowerinfo2?.evoTower,
               (message, type) =>
                 addLog({
                   time: new Date().toLocaleTimeString(),
@@ -547,7 +569,9 @@ export function createTasksTower(deps) {
                 }),
             );
 
-            // 刷新能量
+            // 刷新能量与层数
+            let nowFloor = lastFloor;
+            let infoRefreshed = false;
             try {
               const evotowerinfoRefresh1 =
                 await tokenStore.sendMessageWithPromise(
@@ -557,21 +581,129 @@ export function createTasksTower(deps) {
                   5000,
                 );
               currentEnergy = evotowerinfoRefresh1?.evoTower?.energy || 0;
+              nowFloor = Number(
+                evotowerinfoRefresh1?.evoTower?.towerId ?? lastFloor,
+              );
+              infoRefreshed = true;
             } catch (e) {
-              // 忽略刷新失败
+              // 忽略刷新失败(如限频),本轮沿用旧值
             }
-          } catch (err) {
-            consecutiveFailures++;
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `战斗出错: ${err.message} (重试 ${consecutiveFailures}/3)`,
-              type: "warning",
-            });
 
-            if (consecutiveFailures >= 3) {
+            if (!infoRefreshed) {
               addLog({
                 time: new Date().toLocaleTimeString(),
-                message: `${token.name} 连续失败次数过多，停止爬怪异塔`,
+                message: `${token.name} 第 ${count} 次战斗完成（塔信息刷新失败，本轮未确认层数/体力）`,
+                type: "warning",
+              });
+              continue;
+            }
+
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 第 ${count} 次战斗完成，当前第 ${nowFloor} 层 (剩余体力 ${currentEnergy})`,
+              type: "info",
+            });
+
+            // 卡层提示:战斗执行了但层数没推进,大概率打不过。
+            // 不中断:打输同样消耗体力,继续打到体力耗尽为止(体力归零后循环自然结束)
+            if (nowFloor > lastFloor) {
+              lastFloor = nowFloor;
+            } else {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 第 ${lastFloor} 层未能通过（可能战力不足），剩余体力 ${currentEnergy}，继续尝试`,
+                type: "warning",
+              });
+            }
+
+            // 体力耗尽时,尝试领取怪异塔免费道具补充一次
+            if (
+              currentEnergy <= 0 &&
+              count < MAX_CLIMB &&
+              !shouldStop.value &&
+              !freeEnergyTried
+            ) {
+              freeEnergyTried = true;
+              try {
+                const freeEnergyResult =
+                  await tokenStore.sendMessageWithPromise(
+                    tokenId,
+                    "mergebox_getinfo",
+                    { actType: 1 },
+                    5000,
+                  );
+                const freeEnergy = freeEnergyResult?.mergeBox?.freeEnergy || 0;
+                if (freeEnergy > 0) {
+                  await tokenStore.sendMessageWithPromise(
+                    tokenId,
+                    "mergebox_claimfreeenergy",
+                    { actType: 1 },
+                    5000,
+                  );
+                  addLog({
+                    time: new Date().toLocaleTimeString(),
+                    message: `${token.name} 体力耗尽，已领取免费道具 x${freeEnergy}，重新检查体力`,
+                    type: "info",
+                  });
+                  const refreshed = await tokenStore.sendMessageWithPromise(
+                    tokenId,
+                    "evotower_getinfo",
+                    {},
+                    5000,
+                  );
+                  currentEnergy = refreshed?.evoTower?.energy || 0;
+                }
+              } catch (e) {
+                // 领取失败不影响主流程
+              }
+            }
+          } catch (err) {
+            // 400340/200400 均为服务器限频(操作过快):退避等待后重试,不计入战斗失败次数
+            // (12:00 批量爬塔日志显示,10 账号并行会在第10层领奖集中爆发时全体触发 400340,
+            //  原先按普通失败计数+仅等1秒,导致限频风暴烧光体力后以"连续失败次数过多"停止)
+            if (
+              err.message &&
+              (err.message.includes("400340") || err.message.includes("200400"))
+            ) {
+              consecutiveRateLimit++;
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 被服务器限频，等待5秒后重试 (限频 ${consecutiveRateLimit}/20)`,
+                type: "warning",
+              });
+              if (consecutiveRateLimit >= 20) {
+                stopReason = "持续被限频(400340)";
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} ${stopReason}，停止爬怪异塔`,
+                  type: "error",
+                });
+                break;
+              }
+              await new Promise((r) => setTimeout(r, 5000));
+              continue;
+            }
+
+            consecutiveRateLimit = 0;
+            consecutiveFailures++;
+
+            // "层次奖励未领取"会导致 readyfight 被拒,重试前先按服务器状态补领
+            await claimPendingEvoTowerRewards(
+              tokenStore,
+              tokenId,
+              (message, type) =>
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} ${message}`,
+                  type,
+                }),
+            );
+
+            if (consecutiveFailures >= 3) {
+              stopReason = "连续失败次数过多";
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} ${stopReason}（第 ${lastFloor} 层附近），停止爬怪异塔`,
                 type: "error",
               });
               break;
@@ -579,17 +711,22 @@ export function createTasksTower(deps) {
 
             await new Promise((r) => setTimeout(r, 1000));
 
-            try {
-              const evotowerinfoRefresh2 =
-                await tokenStore.sendMessageWithPromise(
-                  tokenId,
-                  "evotower_getinfo",
-                  {},
-                  5000,
-                );
-              currentEnergy = evotowerinfoRefresh2?.evoTower?.energy || 0;
-            } catch (e) {
-              // 忽略刷新失败
+            // 出错后多试几次读取真实体力:若实际已耗尽,循环会以"体力耗尽"自然结束,
+            // 而不是在体力读不到的情况下盲试3次后以"连续失败次数过多"停止
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              try {
+                const evotowerinfoRefresh2 =
+                  await tokenStore.sendMessageWithPromise(
+                    tokenId,
+                    "evotower_getinfo",
+                    {},
+                    5000,
+                  );
+                currentEnergy = evotowerinfoRefresh2?.evoTower?.energy || 0;
+                break;
+              } catch (e) {
+                if (attempt < 3) await new Promise((r) => setTimeout(r, 3000));
+              }
             }
           }
         }
@@ -602,9 +739,18 @@ export function createTasksTower(deps) {
           );
         }
         tokenStatus.value[tokenId] = "completed";
+        const finishReason =
+          stopReason ||
+          (shouldStop.value
+            ? "手动停止"
+            : currentEnergy <= 0
+              ? "体力耗尽"
+              : count >= MAX_CLIMB
+                ? `达到设定上限 ${MAX_CLIMB} 次`
+                : "结束");
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `=== ${token.name} 爬怪异塔结束，共 ${count} 次 ===`,
+          message: `=== ${token.name} 爬怪异塔结束: 本次战斗 ${count} 次，当前第 ${lastFloor} 层（${finishReason}）===`,
           type: "success",
         });
       } catch (error) {
@@ -617,7 +763,7 @@ export function createTasksTower(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -701,7 +847,7 @@ export function createTasksTower(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -1010,7 +1156,7 @@ export function createTasksTower(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 断开连接`,
@@ -1150,7 +1296,7 @@ export function createTasksTower(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 断开连接`,
@@ -1375,7 +1521,7 @@ export function createTasksTower(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 断开连接`,
@@ -1399,8 +1545,3 @@ export function createTasksTower(deps) {
     batchMergeItems,
   };
 }
-
-/**
- * 批量使用道具
- * @param {object} deps
- */

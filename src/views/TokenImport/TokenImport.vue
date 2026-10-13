@@ -747,6 +747,7 @@ import {
   getBinPayload,
   getRoleBinFileName,
 } from "@/utils/binFile";
+import { copyText } from "@/utils/fileRelay";
 import { prepareMultiGameLaunch } from "@/utils/gameLauncher";
 import {
   pruneTokenSelection,
@@ -1372,11 +1373,11 @@ const saveEdit = async () => {
 };
 
 const copyToken = async (token) => {
-  try {
-    await navigator.clipboard.writeText(token.token);
+  const ok = await copyText(token.token);
+  if (ok) {
     message.success("Token已复制到剪贴板");
-  } catch (error) {
-    message.error("复制失败");
+  } else {
+    message.error("复制失败,请长按Token文本手动复制");
   }
 };
 
@@ -1405,8 +1406,12 @@ const downloadTokenBin = async (token) => {
       roleId: token.roleId ?? token.id,
       name: token.name,
     });
-    downloadBinFile(fileName, bin);
-    message.success(`已开始下载: ${fileName}`);
+    const result = await downloadBinFile(fileName, bin);
+    if (result === "shared") {
+      message.success("已调起系统分享，可选择保存到文件或发送给其他设备");
+    } else if (result === "downloaded") {
+      message.success(`已开始下载: ${fileName}`);
+    }
   } catch (error) {
     console.error("下载 BIN 失败:", error);
     message.error(error.message || "下载 BIN 失败");

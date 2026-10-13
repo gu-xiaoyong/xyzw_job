@@ -2,7 +2,25 @@
  * 挂机、答题、签到类任务
  * 包含: claimHangUpRewards, batchAddHangUpTime, batchStudy, batchclubsign
  */
+import { isInCurrentWeek } from "@/utils/base";
 import { fillHangUpTime, runWithDailyTaskLock } from "@/utils/dailyTaskState";
+
+/**
+ * 判断本周答题是否已完成（答满10题且开始时间在本周内）
+ */
+const isStudyCompletedThisWeek = (study) => {
+  if (
+    !study ||
+    study.maxCorrectNum === undefined ||
+    study.beginTime === undefined
+  ) {
+    return false;
+  }
+  return (
+    Number(study.maxCorrectNum) >= 10 &&
+    isInCurrentWeek(Number(study.beginTime) * 1000)
+  );
+};
 
 /**
  * 创建挂机、答题、签到类任务执行器
@@ -39,6 +57,7 @@ export function createTasksHangUp(deps) {
     selectedTokens.value.forEach((id) => {
       tokenStatus.value[id] = "waiting";
     });
+
     const taskPromises = selectedTokens.value.map(async (tokenId) => {
       if (shouldStop.value) return;
       tokenStatus.value[tokenId] = "running";
@@ -173,6 +192,35 @@ export function createTasksHangUp(deps) {
 
         await ensureConnection(tokenId);
 
+        // 本周已答满10题并领过奖励的账号直接跳过，不重复答题
+        let beforeCorrect = null;
+        try {
+          const roleInfo = await tokenStore.sendMessageWithPromise(
+            tokenId,
+            "role_getroleinfo",
+            {},
+            8000,
+          );
+          if (isStudyCompletedThisWeek(roleInfo?.role?.study)) {
+            tokenStatus.value[tokenId] = "completed";
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 本周已答满10题并领取奖励，跳过答题`,
+              type: "success",
+            });
+            return;
+          }
+          if (roleInfo?.role?.study?.maxCorrectNum !== undefined) {
+            beforeCorrect = Number(roleInfo.role.study.maxCorrectNum);
+          }
+        } catch (e) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 查询答题状态失败，继续正常答题流程`,
+            type: "warning",
+          });
+        }
+
         // Reset local study status
         tokenStore.gameData.studyStatus = {
           isAnswering: false,
@@ -180,15 +228,43 @@ export function createTasksHangUp(deps) {
           answeredCount: 0,
           status: "",
           timestamp: null,
+          baseCorrect: null,
+          correctCount: null,
+          wrongCount: null,
+          source: "batch",
         };
 
         // Send start command
-        await tokenStore.sendMessageWithPromise(
-          tokenId,
-          "study_startgame",
-          {},
-          5000,
-        );
+        let startResp;
+        try {
+          startResp = await tokenStore.sendMessageWithPromise(
+            tokenId,
+            "study_startgame",
+            {},
+            5000,
+          );
+        } catch (err) {
+          // 3100080: 今日答题次数已用完（每天仅3次答题机会）
+          if (err?.code === 3100080) {
+            tokenStatus.value[tokenId] = "skipped";
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 今日答题机会已用完(每天3次)，明天再试`,
+              type: "warning",
+            });
+            return;
+          }
+          throw err;
+        }
+        const totalQuestions = Array.isArray(startResp?.questionList)
+          ? startResp.questionList.length
+          : null;
+        if (
+          beforeCorrect === null &&
+          startResp?.role?.study?.maxCorrectNum !== undefined
+        ) {
+          beforeCorrect = Number(startResp.role.study.maxCorrectNum);
+        }
 
         // Wait for completion
         let maxWait = 90;
@@ -231,6 +307,45 @@ export function createTasksHangUp(deps) {
             message: `=== ${token.name} 答题完成 ===`,
             type: "success",
           });
+
+          // 结算本轮答对/答错题数（用各自账号的连接查询，避免共享状态串号）
+          // maxCorrectNum 为本周最高答对数：仅当本轮刷新纪录(或首次作答)时能确定本轮答对数
+          if (beforeCorrect !== null) {
+            try {
+              const afterInfo = await tokenStore.sendMessageWithPromise(
+                tokenId,
+                "role_getroleinfo",
+                {},
+                8000,
+              );
+              const after = Number(afterInfo?.role?.study?.maxCorrectNum);
+              if (!Number.isNaN(after)) {
+                const total = totalQuestions ?? 10;
+                let correct = null;
+                if (after > beforeCorrect) {
+                  correct = Math.min(after, total);
+                } else if (beforeCorrect === 0) {
+                  correct = 0;
+                }
+                if (correct !== null) {
+                  const wrong = Math.max(total - correct, 0);
+                  addLog({
+                    time: new Date().toLocaleTimeString(),
+                    message: `${token.name} 答题结果: 共${total}题, 答对${correct}题, 答错${wrong}题 (本周最高答对${after}/10)`,
+                    type: "success",
+                  });
+                } else {
+                  addLog({
+                    time: new Date().toLocaleTimeString(),
+                    message: `${token.name} 本轮未超越本周最高答对${after}/10，无法统计本轮对错`,
+                    type: "warning",
+                  });
+                }
+              }
+            } catch (e) {
+              // 查询答题结果失败不影响任务结果
+            }
+          }
         } else {
           if (shouldStop.value) {
             addLog({
@@ -257,7 +372,7 @@ export function createTasksHangUp(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -320,7 +435,7 @@ export function createTasksHangUp(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -505,7 +620,7 @@ export function createTasksHangUp(deps) {
         }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭`,
@@ -669,7 +784,7 @@ export function createTasksHangUp(deps) {
         }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭`,

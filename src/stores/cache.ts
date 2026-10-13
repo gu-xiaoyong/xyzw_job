@@ -153,8 +153,10 @@ class CacheManager {
         timeout: this.timeout,
         ...config,
       });
-    } else {
-      config && (cache.timeout = config.timeout);
+    } else if (config) {
+      // Cache 的配置存在 symbol 键上，必须更新那里才会在后续 feach 中生效
+      // （cache.timeout = ... 只是挂在实例上的死属性）
+      (cache as any)[config].timeout = config.timeout;
     }
     return cache;
   }

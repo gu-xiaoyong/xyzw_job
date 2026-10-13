@@ -1274,10 +1274,10 @@ import {
   StatsChartOutline,
   TrophyOutline,
 } from "@vicons/ionicons5";
-import html2canvas from "html2canvas";
 import { NAvatar, NButton, NSelect, NTag, useMessage } from "naive-ui";
 import { computed, h, onMounted, ref, watch } from "vue";
 import { useTokenStore } from "@/stores/tokenStore";
+import { copyText } from "@/utils/fileRelay";
 import {
   formatWeapon,
   getLineupType,
@@ -1739,19 +1739,12 @@ const attendanceStats = computed(() => {
 });
 
 // 通用剪贴板复制工具
-const copyToClipboard = (text: string, successMsg: string) => {
-  if (navigator?.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(() => {
-      message.success(successMsg);
-    });
-  } else {
-    const input = document.createElement("textarea");
-    input.value = text;
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand("copy");
-    document.body.removeChild(input);
+const copyToClipboard = async (text: string, successMsg: string) => {
+  const ok = await copyText(text);
+  if (ok) {
     message.success(successMsg);
+  } else {
+    message.error("复制失败,请长按文本手动复制");
   }
 };
 
@@ -3297,6 +3290,7 @@ const handleExportImage = async () => {
   message.loading("正在渲染长图，请稍候...");
 
   try {
+    const { default: html2canvas } = await import("html2canvas"); // html2canvas 体积较大，仅在截图时按需加载
     const canvas = await html2canvas(exportDom.value, {
       scale: 2,
       useCORS: true,

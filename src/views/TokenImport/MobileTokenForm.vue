@@ -495,7 +495,7 @@ const addSelectedRole = async (roleInfo: any) => {
   }
 };
 
-const handleDownload = (roleInfo: any) => {
+const handleDownload = async (roleInfo: any) => {
   if (!originalBinData.value) {
     message.error("请先完成手机号登录");
     return;
@@ -503,7 +503,12 @@ const handleDownload = (roleInfo: any) => {
   try {
     const buffer = buildRoleBin(originalBinData.value, roleInfo.serverId);
     const fileName = getRoleBinFileName(roleInfo);
-    downloadBinFile(fileName, buffer);
+    const result = await downloadBinFile(fileName, buffer);
+    if (result === "shared") {
+      message.success("已调起系统分享，可选择保存到文件或发送给其他设备");
+    } else if (result === "downloaded") {
+      message.success(`已开始下载: ${fileName}`);
+    }
   } catch (error: any) {
     message.error(`下载失败：${error.message || error}`);
   }

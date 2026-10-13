@@ -15,6 +15,10 @@ export class Int64 {
   }
 }
 
+// 模块级单例：BON 编解码热路径上复用，避免每条消息的每个字符串都重新构造
+const SHARED_TEXT_ENCODER = new TextEncoder();
+const SHARED_TEXT_DECODER = new TextDecoder("utf8");
+
 export class DataReader {
   constructor(bytes) {
     this._data = bytes || new Uint8Array(0);
@@ -127,7 +131,7 @@ export class DataReader {
   readUTFBytes(length) {
     if (length === 0) return "";
     if (!this.validate(length)) return;
-    const str = new TextDecoder("utf8").decode(
+    const str = SHARED_TEXT_DECODER.decode(
       this._data.subarray(this.position, this.position + length),
     );
     this.position += length;
@@ -249,7 +253,7 @@ export class DataWriter {
     const from = this.position;
     const reserved = from - start;
 
-    const encoder = new TextEncoder();
+    const encoder = SHARED_TEXT_ENCODER;
     const { written } = encoder.encodeInto(
       str,
       this.data.subarray(this.position),
@@ -279,7 +283,7 @@ export class DataWriter {
 
   writeUTFBytes(str) {
     this.ensureBuffer(6 * str.length);
-    const encoder = new TextEncoder();
+    const encoder = SHARED_TEXT_ENCODER;
     const { written } = encoder.encodeInto(
       str,
       this.data.subarray(this.position),
@@ -529,94 +533,8 @@ export const bon = {
   },
 };
 
-/** —— 协议消息包装，与原 ProtoMsg 类等价 盐场版本—— */
-export class ProtoMsgLegion {
-  constructor(raw) {
-    if (raw?.cmd) {
-      raw.cmd = raw.cmd.toLowerCase();
-    }
-    this._raw = raw;
-    this._rawData = undefined;
-    this._data = undefined;
-    this._t = undefined;
-    this._sendMsg = undefined;
-    this.rtt = 0;
-  }
-
-  get sendMsg() {
-    return this._sendMsg;
-  }
-  get seq() {
-    return this._raw.seq;
-  }
-  get resp() {
-    return this._raw.resp;
-  }
-  get ack() {
-    return this._raw.ack;
-  }
-  get cmd() {
-    return this._raw?.cmd && this._raw?.cmd.toLowerCase();
-  }
-  get code() {
-    return ~~this._raw.code;
-  }
-  get error() {
-    return this._raw.error;
-  }
-  get time() {
-    return this._raw.time;
-  }
-  get body() {
-    return this._raw.body;
-  }
-  get hint() {
-    return this._raw.hint;
-  }
-
-  /** 惰性 decode body → rawData（bon.decode） */
-  get rawData() {
-    if (this._rawData !== undefined || this.body === undefined)
-      return this._rawData;
-    this._rawData = bon.decode(this.body);
-    return this._rawData;
-  }
-
-  /** 指定数据类型 */
-  setDataType(t) {
-    if (t) this._t = { name: t.name ?? "Anonymous", ctor: t };
-    return this;
-  }
-
-  /** 配置"请求"对象，让 respType 自动对齐 */
-  setSendMsg(msg) {
-    this._sendMsg = msg;
-    return this.setDataType(msg.respType);
-  }
-
-  /** 将 rawData 反序列化为业务对象 */
-  getData(clazz) {
-    if (this._data !== undefined || this.rawData === undefined)
-      return this._data;
-
-    let t = this._t;
-    if (clazz && t && clazz !== t.ctor) {
-      console.warn(`getData type not match, ${clazz.name} != ${t.name}`);
-      t = { name: clazz.name, ctor: clazz };
-    }
-
-    this._data = this.rawData;
-    return this._data;
-  }
-
-  toLogString() {
-    const e = { ...this._raw };
-    delete e.body;
-    e.data = this.rawData;
-    e.rtt = this.rtt;
-    return JSON.stringify(e);
-  }
-}
+/** 盐场版本的消息包装（ProtoMsgLegion）与 ProtoMsg 完全等价，仅多暴露一个 hint，
+ *  实现在文件下方以 `extends ProtoMsg` 提供（需等 ProtoMsg 声明完成） */
 
 export class ProtoMsg {
   constructor(raw) {
@@ -700,6 +618,13 @@ export class ProtoMsg {
     e.data = this.rawData;
     e.rtt = this.rtt;
     return JSON.stringify(e);
+  }
+}
+
+/** —— 协议消息包装，与原 ProtoMsg 类等价 盐场版本—— */
+export class ProtoMsgLegion extends ProtoMsg {
+  get hint() {
+    return this._raw.hint;
   }
 }
 

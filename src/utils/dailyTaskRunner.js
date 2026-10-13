@@ -18,6 +18,35 @@ const taskLabels = {
   13: "竞技场战斗",
   14: "收获盐罐",
 };
+
+// 服务器"未购买"类错误码：属正常情况，不打日志
+const SILENT_ERROR_CODES = new Set([
+  1400010, // 没有购买该月卡，不能领取每日奖励
+]);
+
+// 服务器"无事物可做"类错误码：不算失败，降级为 info 日志
+const INFO_ERROR_CODES = new Set([
+  3500020, // 没有可领取的奖励（通行证等）
+  12000116, // 今日已领取免费奖励
+  400000, // 物品不存在（无免费扭蛋次数）
+  700010, // 任务未达成完成条件
+  3300060, // 扫荡条件不满足
+  200160, // 模块未开启
+  2600040, // 暂无可执行操作（咸王梦境等）
+  200020, // 出了点小问题（周常任务奖励等，全员返回）
+  1300040, // 未知错误（黑市等）
+]);
+
+// 小号等级阈值：低于该值部分功能未解锁，相关报错不打印
+const ALT_ACCOUNT_LEVEL = 4001;
+const ALT_SILENT_ERROR_CODES = new Set([200020, 1300040]);
+
+const extractErrorCode = (error) => {
+  if (error?.code !== undefined) return error.code;
+  const match = /服务器错误: (\d+)/.exec(error?.message || "");
+  return match ? Number(match[1]) : null;
+};
+
 // 辅助函数
 const pickArenaTargetId = (targets) => {
   if (!targets) return null;
@@ -57,6 +86,7 @@ export class DailyTaskRunner {
       options.sleep ||
       ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.tokenStore = tokenStore;
+    this.roleLevels = {}; // 记录各账号等级，用于小号日志过滤
     this.delaySettings = delaySettings || {
       commandDelay: 500,
       taskDelay: 500,
@@ -110,10 +140,23 @@ export class DailyTaskRunner {
       if (description) {
         const token = this.tokenStore.gameTokens.find((t) => t.id === tokenId);
         const tokenName = token?.name || tokenId;
-        this.log(
-          `[${tokenName}] ${description} - 失败: ${error.message}`,
-          "error",
-        );
+        const code = extractErrorCode(error);
+        const level = this.roleLevels[tokenId];
+        const isAltAccount =
+          level !== undefined && Number(level) < ALT_ACCOUNT_LEVEL;
+        if (
+          (code !== null && SILENT_ERROR_CODES.has(code)) ||
+          (isAltAccount && code !== null && ALT_SILENT_ERROR_CODES.has(code))
+        ) {
+          // 未购买或小号功能未解锁，属正常情况，不打印日志
+        } else if (code !== null && INFO_ERROR_CODES.has(code)) {
+          this.log(`[${tokenName}] ${description} - ${error.message}`, "info");
+        } else {
+          this.log(
+            `[${tokenName}] ${description} - 失败: ${error.message}`,
+            "error",
+          );
+        }
       }
       throw error;
     }
@@ -235,6 +278,7 @@ export class DailyTaskRunner {
         throw error;
       }
       this.roleData = role;
+      this.roleLevels[tokenId] = role.level;
       this.roleStateDirty = false;
       for (const state of states) {
         const signature = `${state.status}:${state.progress}/${state.required}`;
@@ -931,7 +975,7 @@ export class DailyTaskRunner {
           if (error.interrupted) throw error;
           summary.failed++;
           if (this.activeCondition === undefined) supplementalIncomplete++;
-          this.log(`任务执行失败: ${task.name} - ${error.message}`, "error");
+          // 失败日志已由 executeGameCommand 按错误码分级记录，这里不再重复打印
           // Match the original runner: a business rejection fails this step only.
           if (
             !error.serverStateUnavailable &&

@@ -183,7 +183,7 @@ export function createTasksItem(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${tokenName} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -202,7 +202,10 @@ export function createTasksItem(deps) {
   /**
    * 批量英雄升星
    */
-  const batchHeroUpgrade = async () => {
+  /**
+   * 批量升星通用实现（英雄升星 / 图鉴升星仅命令与文案不同，其余逐行相同）
+   */
+  const runBatchStarUpgrade = async ({ label, cmd }) => {
     if (selectedTokens.value.length === 0) return;
 
     isRunning.value = true;
@@ -221,7 +224,7 @@ export function createTasksItem(deps) {
       try {
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `=== 开始英雄升星: ${token.name} ===`,
+          message: `=== 开始${label}: ${token.name} ===`,
           type: "info",
         });
 
@@ -230,34 +233,29 @@ export function createTasksItem(deps) {
         for (const heroId of heroIds) {
           if (shouldStop.value) break;
 
-          // 每个英雄尝试最多10次升星（只要成功就继续，失败则跳过该英雄）
+          // 每个英雄尝试最多10次(resolve即成功继续; reject说明碎片不足/满星/未拥有, 跳过该英雄)
           for (let i = 1; i <= 10; i++) {
             if (shouldStop.value) break;
 
             try {
-              const res = await tokenStore.sendMessageWithPromise(
+              await tokenStore.sendMessageWithPromise(
                 tokenId,
-                "hero_heroupgradestar",
+                cmd,
                 { heroId },
-                5000,
+                8000,
               );
-              const ok =
-                res &&
-                (res.code === 0 || res.success === true || res.result === 0);
-
-              if (ok) {
-                addLog({
-                  time: new Date().toLocaleTimeString(),
-                  message: `${token.name} 英雄ID:${heroId} 升星成功 (第${i}次)`,
-                  type: "success",
-                });
-                // 成功了继续尝试下一级，直到失败或达到10次
-              } else {
-                // 失败说明无法继续升星（碎片不足或满星），跳出循环处理下一个英雄
-                throw new Error("升星失败");
-              }
+              // 客户端对错误码统一 reject, resolve 即成功
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 英雄ID:${heroId}(${HERO_DICT[heroId]?.name || heroId}) ${label}成功 (第${i}次)`,
+                type: "success",
+              });
             } catch (err) {
-              // 失败则停止当前英雄的升星尝试
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 英雄ID:${heroId}(${HERO_DICT[heroId]?.name || heroId}) 停止${label}: ${err.message || "未知错误"}`,
+                type: "info",
+              });
               break;
             }
             await new Promise((r) => setTimeout(r, delayConfig.action));
@@ -267,7 +265,7 @@ export function createTasksItem(deps) {
         tokenStatus.value[tokenId] = "completed";
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `${token.name} === 英雄升星完成 ===`,
+          message: `${token.name} === ${label}完成 ===`,
           type: "success",
         });
       } catch (error) {
@@ -275,111 +273,32 @@ export function createTasksItem(deps) {
         tokenStatus.value[tokenId] = "failed";
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `英雄升星失败: ${error.message}`,
+          message: `${label}失败: ${error.message}`,
           type: "error",
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
       }
     });
 
     await Promise.all(taskPromises);
     isRunning.value = false;
     currentRunningTokenId.value = null;
-    message.success("批量英雄升星结束");
+    message.success(`批量${label}结束`);
   };
+
+  /**
+   * 批量英雄升星
+   */
+  const batchHeroUpgrade = () =>
+    runBatchStarUpgrade({ label: "英雄升星", cmd: "hero_heroupgradestar" });
 
   /**
    * 批量图鉴升星
    */
-  const batchBookUpgrade = async () => {
-    if (selectedTokens.value.length === 0) return;
-
-    isRunning.value = true;
-    shouldStop.value = false;
-
-    selectedTokens.value.forEach((id) => {
-      tokenStatus.value[id] = "waiting";
-    });
-
-    const taskPromises = selectedTokens.value.map(async (tokenId) => {
-      if (shouldStop.value) return;
-
-      tokenStatus.value[tokenId] = "running";
-      const token = tokens.value.find((t) => t.id === tokenId);
-
-      try {
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `=== 开始图鉴升星: ${token.name} ===`,
-          type: "info",
-        });
-
-        await ensureConnection(tokenId);
-
-        for (const heroId of heroIds) {
-          if (shouldStop.value) break;
-
-          // 每个英雄尝试最多10次图鉴升星（只要成功就继续，失败则跳过该英雄）
-          for (let i = 1; i <= 10; i++) {
-            if (shouldStop.value) break;
-
-            try {
-              const res = await tokenStore.sendMessageWithPromise(
-                tokenId,
-                "book_upgrade",
-                { heroId },
-                5000,
-              );
-              const ok =
-                res &&
-                (res.code === 0 || res.success === true || res.result === 0);
-
-              if (ok) {
-                addLog({
-                  time: new Date().toLocaleTimeString(),
-                  message: `${token.name} 英雄ID:${heroId} 图鉴升星成功 (第${i}次)`,
-                  type: "success",
-                });
-                // 成功了继续尝试下一级，直到失败或达到10次
-              } else {
-                // 失败说明无法继续图鉴升星（碎片不足或满星），跳出循环处理下一个英雄
-                throw new Error("图鉴升星失败");
-              }
-            } catch (err) {
-              // 失败则停止当前英雄的图鉴升星尝试
-              break;
-            }
-            await new Promise((r) => setTimeout(r, delayConfig.action));
-          }
-        }
-
-        tokenStatus.value[tokenId] = "completed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} === 图鉴升星完成 ===`,
-          type: "success",
-        });
-      } catch (error) {
-        console.error(error);
-        tokenStatus.value[tokenId] = "failed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `图鉴升星失败: ${error.message}`,
-          type: "error",
-        });
-      } finally {
-        tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
-      }
-    });
-
-    await Promise.all(taskPromises);
-    isRunning.value = false;
-    currentRunningTokenId.value = null;
-    message.success("批量图鉴升星结束");
-  };
+  const batchBookUpgrade = () =>
+    runBatchStarUpgrade({ label: "图鉴升星", cmd: "book_upgrade" });
 
   /**
    * 批量领取图鉴奖励
@@ -455,7 +374,7 @@ export function createTasksItem(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
       }
     });
 
@@ -523,7 +442,7 @@ export function createTasksItem(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -660,10 +579,14 @@ export function createTasksItem(deps) {
                   });
                   await new Promise((r) => setTimeout(r, 1000));
                 } catch (e) {
+                  // 200020 = 服务器暂无可领取，属正常情况
+                  const nothingToClaim = (e.message || "").includes("200020");
                   addLog({
                     time: new Date().toLocaleTimeString(),
-                    message: `${token.name} 领取俱乐部任务奖励失败: ${e.message}`,
-                    type: "error",
+                    message: nothingToClaim
+                      ? `${token.name} 俱乐部任务奖励暂无可领取，跳过`
+                      : `${token.name} 领取俱乐部任务奖励失败: ${e.message}`,
+                    type: nothingToClaim ? "info" : "error",
                   });
                 }
               }
@@ -687,20 +610,27 @@ export function createTasksItem(deps) {
                   });
                   await new Promise((r) => setTimeout(r, 1000));
                 } catch (e) {
+                  // 200020 = 服务器暂无可领取，属正常情况
+                  const nothingToClaim = (e.message || "").includes("200020");
                   addLog({
                     time: new Date().toLocaleTimeString(),
-                    message: `${token.name} 领取个人任务奖励失败: ${e.message}`,
-                    type: "error",
+                    message: nothingToClaim
+                      ? `${token.name} 个人任务奖励暂无可领取，跳过`
+                      : `${token.name} 领取个人任务奖励失败: ${e.message}`,
+                    type: nothingToClaim ? "info" : "error",
                   });
                 }
               }
             }
           } catch (err) {
             console.error("领取蟠桃园积分奖励异常:", err);
+            const nothingToClaim = (err.message || "").includes("200020");
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `${token.name} 领取积分奖励异常: ${err.message}`,
-              type: "error",
+              message: nothingToClaim
+                ? `${token.name} 积分奖励暂无可领取，跳过`
+                : `${token.name} 领取积分奖励异常: ${err.message}`,
+              type: nothingToClaim ? "info" : "error",
             });
           }
 
@@ -727,15 +657,26 @@ export function createTasksItem(deps) {
         });
       } catch (error) {
         console.error(error);
-        tokenStatus.value[tokenId] = "failed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 领取蟠桃园任务奖励失败: ${error.message}`,
-          type: "error",
-        });
+        // 200020 = 服务器暂无可领取，属正常情况
+        const nothingToClaim = (error.message || "").includes("200020");
+        if (nothingToClaim) {
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 蟠桃园暂无可领取奖励，跳过`,
+            type: "info",
+          });
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 领取蟠桃园任务奖励失败: ${error.message}`,
+            type: "error",
+          });
+        }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -868,7 +809,8 @@ export function createTasksItem(deps) {
               5000,
             );
 
-            const ok = res && (res.role || res.role.items);
+            // 注意用可选链：res.role 为 undefined 时直接访问 res.role.items 会 TypeError
+            const ok = Boolean(res?.role?.items || res?.role);
 
             if (ok) {
               addLog({
@@ -917,7 +859,7 @@ export function createTasksItem(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
       }
     });
 
@@ -1018,7 +960,7 @@ export function createTasksItem(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -1245,7 +1187,7 @@ export function createTasksItem(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -1347,7 +1289,7 @@ export function createTasksItem(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -1617,7 +1559,7 @@ export function createTasksItem(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,

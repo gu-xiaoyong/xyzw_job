@@ -1,5 +1,5 @@
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, _ctx) {
     const url = new URL(request.url);
 
     // CORS headers
@@ -19,12 +19,14 @@ export default {
     const proxies = [
       {
         prefix: "/api/hortor-ucenter",
-        target: "https://comb-platform.hortorgames.com",
+        // ucenter 网关按 Host 路由：直连 ucenter 域名，前缀剥离后剩余的
+        // /ucenter-app-server/... 即上游真实路径。Cloudflare Workers 的 fetch
+        // 无法伪造 Host，因此不能借道 comb-platform
+        target: "https://ucenter-app-server.hortorgames.com",
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Linux; Android 12; ALN-AL80 Build/HUAWEIALN-AL80; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/114.0.5735.196 Mobile Safari/537.36",
           Accept: "application/json",
-          Host: "ucenter-app-server.hortorgames.com",
           "Content-Type": "application/json; charset=utf-8",
         },
       },
@@ -111,6 +113,109 @@ export default {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+    }
+
+    // Stateless file relay: binary carried in query string (base64url),
+    // served back as a standard attachment download. Used by App WebView
+    // environments that cannot save blob/object-url downloads.
+    // /api/bin-file is kept as a legacy alias of /api/download-file.
+    if (
+      url.pathname === "/api/download-file" ||
+      url.pathname === "/api/bin-file"
+    ) {
+      if (request.method === "OPTIONS") {
+        return new Response(null, { headers: corsHeaders });
+      }
+      try {
+        const name = (url.searchParams.get("n") || "token.bin").slice(0, 120);
+        const data = url.searchParams.get("d") || "";
+        if (!data || data.length > 90000) {
+          throw new Error("file data missing or too large");
+        }
+        const normalized = data.replace(/-/g, "+").replace(/_/g, "/");
+        const padded =
+          normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+        const bin = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+        const asciiName = name
+          .replace(/[^\x20-\x7E]/g, "_")
+          .replace(/["\\]/g, "_");
+        return new Response(bin, {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+            "Cache-Control": "no-store",
+          },
+        });
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ error: e.message || "invalid data" }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+    }
+
+    // Temporary file relay: client POSTs bytes, worker caches them under a
+    // random id (Cache API, ~30min TTL) and returns a plain https download URL.
+    // Serves cases where the data exceeds URL-length limits (e.g. table images).
+    if (url.pathname === "/api/upload-file" && request.method === "POST") {
+      try {
+        const name = (url.searchParams.get("n") || "file.bin").slice(0, 120);
+        const body = await request.arrayBuffer();
+        if (!body || body.byteLength === 0) throw new Error("empty body");
+        if (body.byteLength > 8 * 1024 * 1024) {
+          throw new Error("file too large (max 8MB)");
+        }
+        const id =
+          (crypto.randomUUID && crypto.randomUUID()) ||
+          String(Date.now()) + Math.random().toString(16).slice(2);
+        const relayUrl = `${url.origin}/api/relay-file/${id}`;
+        const asciiName = name
+          .replace(/[^\x20-\x7E]/g, "_")
+          .replace(/["\\]/g, "_");
+        const cachedResponse = new Response(body, {
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "Content-Disposition": `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+            "Cache-Control": "public, max-age=1800",
+          },
+        });
+        await caches.default.put(new Request(relayUrl), cachedResponse);
+        return new Response(JSON.stringify({ url: relayUrl }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ error: e.message || "upload failed" }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+    }
+
+    // Serve relayed files cached by /api/upload-file (download as attachment).
+    if (
+      url.pathname.startsWith("/api/relay-file/") &&
+      request.method === "GET"
+    ) {
+      const cached = await caches.default.match(request);
+      if (cached) {
+        const headers = new Headers(cached.headers);
+        Object.entries(corsHeaders).forEach(([k, v]) => headers.set(k, v));
+        return new Response(cached.body, { status: 200, headers });
+      }
+      return new Response("文件不存在或已过期,请重新生成下载链接", {
+        status: 404,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/plain; charset=utf-8",
+        },
+      });
     }
 
     // Serve static assets (Cloudflare Pages)

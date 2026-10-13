@@ -74,15 +74,20 @@ export default defineConfig(async () => {
     dts: "src/auto-imports.d.ts",
   });
 
-  const { ArcoResolver } = componentsResolversModule ?? {};
+  const { ArcoResolver, NaiveUiResolver } = componentsResolversModule ?? {};
   const componentsPlugin = componentsModule?.default?.({
     dirs: ["src/components"],
     globsExclude: ["**/Private/**"],
-    resolvers: ArcoResolver
+    resolvers: componentsResolversModule
       ? [
-          ArcoResolver({
-            importStyle: false,
-          }),
+          NaiveUiResolver(),
+          ...(ArcoResolver
+            ? [
+                ArcoResolver({
+                  importStyle: false,
+                }),
+              ]
+            : []),
         ]
       : [],
   });
@@ -138,9 +143,11 @@ export default defineConfig(async () => {
       open: true,
       host: true,
       proxy: {
-        // 手机号验证码接口需要以 ucenter-app-server Host 路由。
+        // 手机号验证码接口：ucenter 网关按 Host 路由，直连 ucenter 域名；
+        // 去掉代理前缀后剩余的 /ucenter-app-server/... 即上游真实路径。
+        // （Cloudflare Workers 的 fetch 无法伪造 Host，不能借道 comb-platform）
         "/api/hortor-ucenter": {
-          target: "https://comb-platform.hortorgames.com",
+          target: "https://ucenter-app-server.hortorgames.com",
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/hortor-ucenter/, ""),
           secure: true,
@@ -148,7 +155,6 @@ export default defineConfig(async () => {
             "User-Agent":
               "Mozilla/5.0 (Linux; Android 12; ALN-AL80 Build/HUAWEIALN-AL80; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/114.0.5735.196 Mobile Safari/537.36",
             Accept: "application/json",
-            Host: "ucenter-app-server.hortorgames.com",
             "Content-Type": "application/json; charset=utf-8",
           },
         },
@@ -203,6 +209,17 @@ export default defineConfig(async () => {
         scss: {
           api: "modern",
           additionalData: '@use "@/assets/styles/variables.scss" as vars;',
+        },
+      },
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          // 把稳定的 vendor 拆成独立 chunk，业务代码迭代时命中缓存
+          manualChunks: {
+            "vendor-vue": ["vue", "vue-router", "pinia", "vue-i18n"],
+            "vendor-ui": ["naive-ui", "@arco-design/web-vue"],
+          },
         },
       },
     },

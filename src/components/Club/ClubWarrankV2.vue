@@ -746,7 +746,6 @@
 <script setup>
 import { Copy, CreateOutline, DocumentText, Refresh } from "@vicons/ionicons5";
 
-import html2canvas from "html2canvas";
 import {
   NAvatar,
   NCheckbox,
@@ -2116,24 +2115,39 @@ const setActiveAlliance = (alliance) => {
   activeAlliance.value = alliance;
 };
 
-// 获取联盟数量
-const getActiveAllianceCount = (alliance) => {
-  if (!battleRecords1.value?.legionRankList) {
-    return 0;
-  }
-
-  return battleRecords1.value.legionRankList.filter((member) => {
-    const memberAlliance = getMemberAlliance(member);
-    if (alliance === "空白") {
-      return (
+// 获取联盟数量：单次遍历统计全部联盟，模板调用变为 O(1) 查表
+// （原实现每次渲染对整个 legionRankList 做 6 次 filter）
+const allianceCounts = computed(() => {
+  const counts = {
+    大联盟: 0,
+    梦盟: 0,
+    正义联盟: 0,
+    龙盟: 0,
+    曦盟: 0,
+    未知联盟: 0,
+    空白: 0,
+  };
+  const list = battleRecords1.value?.legionRankList;
+  if (list) {
+    for (const member of list) {
+      if (
         !member.announcement ||
         member.announcement === 0 ||
         member.announcement === "0"
-      );
+      ) {
+        counts["空白"]++;
+      }
+      const memberAlliance = getMemberAlliance(member);
+      if (counts[memberAlliance] !== undefined) {
+        counts[memberAlliance]++;
+      }
     }
-    return memberAlliance === alliance;
-  }).length;
-};
+  }
+  return counts;
+});
+
+const getActiveAllianceCount = (alliance) =>
+  allianceCounts.value[alliance] ?? 0;
 
 // 格式化战�?
 const formatPower = (power) => {
@@ -2719,7 +2733,7 @@ const handleExport1 = async () => {
 
   try {
     if (exportmethod.value.includes("1")) {
-      formatWarrankRecordsForExport(
+      await formatWarrankRecordsForExport(
         battleRecords1.value.legionRankList,
         queryDate.value,
       );
@@ -2801,6 +2815,7 @@ const exportToImage = async () => {
     const exportHeight = Math.ceil(contentBottom + 2);
 
     // 5. 用html2canvas渲染DOM为Canvas
+    const { default: html2canvas } = await import("html2canvas"); // html2canvas 体积较大，仅在截图时按需加载
     const canvas = await html2canvas(exportDom.value, {
       scale: 2, // 放大2倍，解决图片模糊问题
       useCORS: true, // 允许跨域图片（若DOM内有远程图片，需开启）

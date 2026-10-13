@@ -30,6 +30,67 @@ export function createTasksLegacy(deps) {
     delayConfig,
   } = deps;
 
+  // 新赛季探索「开始」按钮的真实命令(用户抓包确认: Legacy_BeginHangUpResp)
+  const EXPLORE_START_CMD = "legacy_beginhangup";
+
+  /**
+   * 尝试开始功法探索(等价于游戏内点「开始」)
+   * 先读 hangUpBeginTime 判断是否已在探索中, 已开始则不重复发送(避免重置探索周期)
+   * @returns {boolean} 是否确认已开始(或已在探索中)
+   */
+  const tryStartExplore = async (tokenId, tokenName) => {
+    try {
+      const info = await tokenStore.sendMessageWithPromise(
+        tokenId,
+        "legacy_getinfo",
+        {},
+        10000,
+      );
+      const beginTime = Number(info?.roleLegacy?.hangUpBeginTime || 0);
+      if (beginTime > 0) {
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${tokenName} 探索已在进行中，跳过开始`,
+          type: "info",
+        });
+        return true;
+      }
+    } catch {
+      // 读取失败则继续尝试直接开始
+    }
+
+    try {
+      await tokenStore.sendMessageWithPromise(
+        tokenId,
+        EXPLORE_START_CMD,
+        {},
+        5000,
+      );
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `${tokenName} 已开始探索(${EXPLORE_START_CMD})，探索周期开始产出残卷`,
+        type: "success",
+      });
+      return true;
+    } catch (err) {
+      const msg = err.message || "";
+      if (msg.includes("200020")) {
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${tokenName} 探索已在进行中`,
+          type: "info",
+        });
+        return true;
+      }
+      addLog({
+        time: new Date().toLocaleTimeString(),
+        message: `${tokenName} 开始探索失败: ${msg || "未知错误"}`,
+        type: "error",
+      });
+      return false;
+    }
+  };
+
   /**
    * 批量领取功法残卷
    */
@@ -69,15 +130,51 @@ export function createTasksLegacy(deps) {
         tokenStatus.value[tokenId] = "completed";
       } catch (error) {
         console.error(error);
-        tokenStatus.value[tokenId] = "failed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `=== ${token.name} 领取功法残卷失败: ${error.message || "未知错误"}`,
-          type: "error",
-        });
+        // 200020 = 暂无可领取（挂机无积累）; 12400000 = 领取间隔未到（刚开启探索等），均为正常情况，降级 info 不算失败
+        const codeMatch = /服务器错误: (\d+)/.exec(error.message || "");
+        const errorCode =
+          error?.code ?? (codeMatch ? Number(codeMatch[1]) : null);
+        if (errorCode === 200020 || errorCode === 12400000) {
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message:
+              errorCode === 200020
+                ? `${token.name} 暂无可领取的功法残卷（若为新赛季请先用「批量功法残卷开启」开始探索）`
+                : `${token.name} 挂机奖励领取间隔未到，稍后再领`,
+            type: "info",
+          });
+        } else {
+          // 小号（等级<4001）功法未解锁，领取失败属正常情况，不打印错误日志
+          let isAltAccount = false;
+          try {
+            const roleInfo = await tokenStore.sendMessageWithPromise(
+              tokenId,
+              "role_getroleinfo",
+              {},
+              8000,
+            );
+            const level = roleInfo?.role?.level;
+            if (level !== undefined && Number(level) < 4001) {
+              isAltAccount = true;
+            }
+          } catch {
+            // 取不到等级时按普通失败处理
+          }
+          if (isAltAccount) {
+            tokenStatus.value[tokenId] = "completed";
+          } else {
+            tokenStatus.value[tokenId] = "failed";
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `=== ${token.name} 领取功法残卷失败: ${error.message || "未知错误"}`,
+              type: "error",
+            });
+          }
+        }
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -91,6 +188,62 @@ export function createTasksLegacy(deps) {
     isRunning.value = false;
     currentRunningTokenId.value = null;
     message.success("批量领取功法残卷结束");
+  };
+
+  /**
+   * 批量开始功法探索（新赛季「开始」按钮的批量版）
+   */
+  const batchLegacyStartExplore = async () => {
+    if (selectedTokens.value.length === 0) return;
+    isRunning.value = true;
+    shouldStop.value = false;
+
+    selectedTokens.value.forEach((id) => {
+      tokenStatus.value[id] = "waiting";
+    });
+
+    const taskPromises = selectedTokens.value.map(async (tokenId) => {
+      if (shouldStop.value) return;
+      tokenStatus.value[tokenId] = "running";
+
+      const token = tokens.value.find((t) => t.id === tokenId);
+      try {
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `=== 开始功法探索: ${token.name} ===`,
+          type: "info",
+        });
+        await ensureConnection(tokenId);
+
+        const started = await tryStartExplore(tokenId, token.name);
+        tokenStatus.value[tokenId] = "completed";
+        if (!started) {
+          tokenStatus.value[tokenId] = "failed";
+        }
+      } catch (error) {
+        console.error(error);
+        tokenStatus.value[tokenId] = "failed";
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${token.name} 开始功法探索失败: ${error.message || "未知错误"}`,
+          type: "error",
+        });
+      } finally {
+        tokenStore.closeWebSocketConnection(tokenId);
+        releaseConnectionSlot(tokenId);
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
+          type: "info",
+        });
+      }
+    });
+
+    await Promise.all(taskPromises);
+
+    isRunning.value = false;
+    currentRunningTokenId.value = null;
+    message.success("批量开始功法探索结束");
   };
 
   /**
@@ -311,7 +464,7 @@ export function createTasksLegacy(deps) {
           }
         } finally {
           tokenStore.closeWebSocketConnection(tokenId);
-          releaseConnectionSlot();
+          releaseConnectionSlot(tokenId);
           addLog({
             time: new Date().toLocaleTimeString(),
             message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -339,6 +492,7 @@ export function createTasksLegacy(deps) {
 
   return {
     batchLegacyClaim,
+    batchLegacyStartExplore,
     batchLegacyGiftSendEnhanced,
   };
 }

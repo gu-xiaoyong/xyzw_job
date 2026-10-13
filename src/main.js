@@ -1,4 +1,3 @@
-import naive from "naive-ui";
 import { createPinia } from "pinia";
 import { createApp } from "vue";
 
@@ -11,10 +10,9 @@ import "./assets/styles/global.scss";
 // 创建应用实例
 const app = createApp(App);
 
-// 使用插件
+// 使用插件（naive-ui 组件由 unplugin-vue-components 的 NaiveUiResolver 按需引入）
 app.use(createPinia());
 app.use(router);
-app.use(naive);
 
 // 全局主题应用：从 localStorage 读取并设置 data-theme 属性
 const applyTheme = () => {

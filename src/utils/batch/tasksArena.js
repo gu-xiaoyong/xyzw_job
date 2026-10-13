@@ -206,7 +206,7 @@ export function createTasksArena(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -244,6 +244,57 @@ export function createTasksArena(deps) {
           type: "info",
         });
         await ensureConnection(tokenId);
+
+        // 每账号实时拉取角色信息(tokenStore.gameData 是共享缓存, 多账号下可能是别人的数据)
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${token.name} 获取角色信息...`,
+          type: "info",
+        });
+        let role = null;
+        try {
+          const roleInfo = await tokenStore.sendGetRoleInfo(tokenId);
+          role = roleInfo?.role;
+        } catch {}
+
+        // 今日免费3次: 只要没用就先钓掉(白赚进度, 不依赖每日任务是否执行)
+        let freeUsed = 0;
+        const lastFreeTime = Number(
+          role?.statisticsTime?.["artifact:normal:lottery:time"] || 0,
+        );
+        if (isTodayAvailable(lastFreeTime)) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 检测到今日免费钓鱼未使用，先消耗 3 次`,
+            type: "info",
+          });
+          for (let i = 0; i < 3 && !shouldStop.value; i++) {
+            try {
+              await tokenStore.sendMessageWithPromise(
+                tokenId,
+                "artifact_lottery",
+                { lotteryNumber: 1, newFree: true, type: 1 },
+                8000,
+              );
+              freeUsed++;
+              await new Promise((r) => setTimeout(r, delayConfig.action));
+            } catch (e) {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 免费钓鱼失败: ${e.message}`,
+                type: "error",
+              });
+              break;
+            }
+          }
+        } else {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 今日免费钓鱼已使用`,
+            type: "info",
+          });
+        }
+
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 获取月度任务进度...`,
@@ -269,7 +320,6 @@ export function createTasksArena(deps) {
         const myMonthInfo = act.myMonthInfo || {};
         const fishNum = Number(myMonthInfo?.["2"]?.num || 0);
 
-        const monthProgress = calculateMonthProgress();
         const now = new Date();
         const daysInMonth = new Date(
           now.getFullYear(),
@@ -278,92 +328,19 @@ export function createTasksArena(deps) {
         ).getDate();
         const dayOfMonth = now.getDate();
         const remainingDays = Math.max(0, daysInMonth - dayOfMonth);
-        const shouldBe =
-          remainingDays === 0
-            ? FISH_TARGET
-            : Math.min(FISH_TARGET, Math.ceil(monthProgress * FISH_TARGET));
-        const need = Math.max(0, shouldBe - fishNum);
+        // 目标 = 320 - 剩余天数×3(每天3次免费钓鱼由每日任务自动消耗)
+        // 例: 9/26 剩4天 → 今天补到 308, 剩余12次由后续免费钓鱼补满, 月底正好 320
+        const shouldBe = Math.min(FISH_TARGET, FISH_TARGET - remainingDays * 3);
+        let remaining = Math.max(0, shouldBe - fishNum);
         addLog({
           time: new Date().toLocaleTimeString(),
-          message: `${token.name} 当前进度: ${fishNum}/${FISH_TARGET}，需要补齐: ${need}次`,
-          type: "info",
-        });
-        if (need <= 0) {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `当前进度已达标，无需补齐`,
-            type: "success",
-          });
-          tokenStatus.value[tokenId] = "completed";
-          return;
-        }
-
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 开始执行钓鱼补齐...`,
-          type: "info",
-        });
-
-        let role = tokenStore.gameData?.roleInfo?.role;
-        if (!role) {
-          try {
-            const roleInfo = await tokenStore.sendGetRoleInfo(tokenId);
-            role = roleInfo?.role;
-          } catch {}
-        }
-        let freeUsed = 0;
-        const lastFreeTime = Number(
-          role?.statisticsTime?.["artifact:normal:lottery:time"] || 0,
-        );
-        if (isTodayAvailable(lastFreeTime)) {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${token.name} 检测到今日免费钓鱼次数，开始消耗 3 次`,
-            type: "info",
-          });
-          for (let i = 0; i < 3 && need > freeUsed && !shouldStop.value; i++) {
-            try {
-              await tokenStore.sendMessageWithPromise(
-                tokenId,
-                "artifact_lottery",
-                { lotteryNumber: 1, newFree: true, type: 1 },
-                8000,
-              );
-              freeUsed++;
-              await new Promise((r) => setTimeout(r, delayConfig.action));
-            } catch (e) {
-              addLog({
-                time: new Date().toLocaleTimeString(),
-                message: `${token.name} 免费钓鱼失败: ${e.message}`,
-                type: "error",
-              });
-              break;
-            }
-          }
-        }
-
-        const updatedResult = await tokenStore.sendMessageWithPromise(
-          tokenId,
-          "activity_get",
-          {},
-          10000,
-        );
-        const updatedAct =
-          updatedResult?.activity ||
-          updatedResult?.body?.activity ||
-          updatedResult;
-        const updatedMyMonthInfo = updatedAct.myMonthInfo || {};
-        const updatedFishNum = Number(updatedMyMonthInfo?.["2"]?.num || 0);
-        let remaining = Math.max(0, shouldBe - updatedFishNum);
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 免费次数后进度: ${updatedFishNum}/${FISH_TARGET}，还需补齐: ${remaining}次`,
+          message: `${token.name} 当前进度: ${fishNum}/${FISH_TARGET}（含本次免费${freeUsed}次），今日目标: ${shouldBe}（剩${remainingDays}天×3次免费），需要补齐: ${remaining}次`,
           type: "info",
         });
         if (remaining <= 0) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `已通过免费次数完成目标`,
+            message: `当前进度已达标，无需付费补齐`,
             type: "success",
           });
           tokenStatus.value[tokenId] = "completed";
@@ -535,7 +512,7 @@ export function createTasksArena(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,
@@ -902,7 +879,7 @@ export function createTasksArena(deps) {
         });
       } finally {
         tokenStore.closeWebSocketConnection(tokenId);
-        releaseConnectionSlot();
+        releaseConnectionSlot(tokenId);
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${token.name} 连接已关闭  (队列: ${connectionQueue.active}/${batchSettings.maxActive})`,

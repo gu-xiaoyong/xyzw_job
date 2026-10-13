@@ -395,6 +395,7 @@ import { AlertCircleOutline } from "@vicons/ionicons5";
 import { useMessage } from "naive-ui";
 import { computed, ref, watch } from "vue";
 import { selectedTokenId, useTokenStore } from "@/stores/tokenStore";
+import { copyText } from "@/utils/fileRelay";
 
 const tokenStore = useTokenStore();
 const message = useMessage();
@@ -831,18 +832,11 @@ const exportHistory = () => {
 
 // 复制相关方法
 const copyToClipboard = async (text) => {
-  try {
-    await navigator.clipboard.writeText(text);
+  const ok = await copyText(text);
+  if (ok) {
     message.success("已复制到剪贴板");
-  } catch (error) {
-    // 降级方案
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-    document.body.appendChild(textArea);
-    textArea.select();
-    document.execCommand("copy");
-    document.body.removeChild(textArea);
-    message.success("已复制到剪贴板");
+  } else {
+    message.error("复制失败,请长按文本手动复制");
   }
 };
 

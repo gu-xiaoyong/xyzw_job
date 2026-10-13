@@ -65,6 +65,8 @@ const CMD_DEFAULTS = {
   bosstower_startbox: {},
   legion_getinfo: {},
   legion_signin: {},
+  club_getinfo: {},
+  club_taskclaim: { confId: 1 },
   mail_getlist: { category: [0, 4, 5], lastId: 0, size: 60 },
   mail_claimallattachment: { category: 0 },
   presetteam_getinfo: {},
@@ -75,6 +77,10 @@ const CMD_DEFAULTS = {
   mergebox_openbox: {},
   discount_claimreward: { discountId: 1 },
   collection_claimfreereward: {},
+  store_purchase: { goodsId: 1 },
+  task_claimweekreward: { rewardId: 0 },
+  apex_taskclaim: { confId: 1 },
+  apex_getroleinfo: {},
 };
 
 // 响应→请求命令映射
@@ -109,6 +115,8 @@ const RESP_MAP = {
   bosstower_startboxresp: "bosstower_startbox",
   legion_getinforesp: "legion_getinfo",
   legion_signinresp: "legion_signin",
+  club_getinforesp: "club_getinfo",
+  club_taskclaimresp: "club_taskclaim",
   mail_claimallattachmentresp: "mail_claimallattachment",
   presetteam_getinforesp: "presetteam_getinfo",
   artifact_lotteryresp: "artifact_lottery",
@@ -118,6 +126,10 @@ const RESP_MAP = {
   mergebox_openboxresp: "mergebox_openbox",
   discount_claimrewardresp: "discount_claimreward",
   collection_claimfreerewardresp: "collection_claimfreereward",
+  store_purchaseresp: "store_purchase",
+  apex_getroleinforesp: "apex_getroleinfo",
+  apex_taskclaimresp: "apex_taskclaim",
+  task_claimweekrewardresp: "task_claimweekreward",
   syncrewardresp: [
     "system_buygold",
     "system_signinreward",
@@ -127,18 +139,17 @@ const RESP_MAP = {
 };
 
 class GameClient {
-  constructor(tokenData, wsUrl) {
+  constructor(tokenData, wsUrl, wsOptions = {}) {
     this.token = tokenData;
+    this._wsOptions = wsOptions;
+    // 与浏览器端一致：p = 实际 token 字符串（parseBase64Token 提取后的 actualToken），
+    // 不是 JSON 对象——旧实现拼 JSON 会导致服务器握手失败
+    const actualToken =
+      tokenData.actualToken || tokenData.token || tokenData.roleToken || "";
     this._wsUrl =
       wsUrl ||
       `wss://xxz-xyzw.hortorgames.com/agent?p=${encodeURIComponent(
-        JSON.stringify({
-          roleToken: tokenData.roleToken,
-          roleId: tokenData.roleId,
-          sessId: tokenData.sessId,
-          connId: tokenData.connId,
-          isRestore: tokenData.isRestore,
-        }),
+        actualToken,
       )}&e=x&lang=chinese`;
 
     this.ws = null;
@@ -166,11 +177,14 @@ class GameClient {
   connect(timeoutMs = 15000) {
     this.disconnect();
     return new Promise((resolve, reject) => {
-      this.log("连接中:", this._wsUrl.split("?")[0]);
+      this.log(
+        "连接中:",
+        this._wsUrl.replace(/roleToken=[^&]+/, "roleToken=***"),
+      );
 
       let socket;
       try {
-        socket = new WebSocket(this._wsUrl);
+        socket = new WebSocket(this._wsUrl, this._wsOptions);
       } catch (err) {
         reject(err);
         return;
@@ -445,12 +459,13 @@ class GameClient {
   _sendHeartbeat() {
     if (!this.connected || this.ws?.readyState !== WebSocket.OPEN) return;
     try {
+      // 与浏览器一致：body 传空对象，避免编码差异
       const rawMsg = {
         cmd: "_sys/ack",
         ack: this.ack,
         seq: 0,
         time: Date.now(),
-        body: undefined,
+        body: {},
       };
       const encoded = encode(rawMsg, getEnc("x"));
       this.ws.send(encoded);
