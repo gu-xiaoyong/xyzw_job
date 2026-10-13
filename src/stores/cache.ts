@@ -146,17 +146,19 @@ class CacheManager {
     this.timeout = timeout;
   }
 
-  getCache(name, config) {
+  getCache(name, options) {
     let cache = this.content[name];
     if (cache == null) {
       this.content[name] = cache = new Cache(name, {
         timeout: this.timeout,
-        ...config,
+        ...options,
       });
-    } else if (config) {
+    } else if (options?.timeout !== undefined) {
       // Cache 的配置存在 symbol 键上，必须更新那里才会在后续 feach 中生效
       // （cache.timeout = ... 只是挂在实例上的死属性）
-      (cache as any)[config].timeout = config.timeout;
+      // 参数不能叫 config，否则会遮蔽模块顶部的 Symbol("config")，
+      // 导致这里用对象当键取到 undefined 而崩溃
+      (cache as any)[config].timeout = options.timeout;
     }
     return cache;
   }
