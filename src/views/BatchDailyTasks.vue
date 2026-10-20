@@ -59,19 +59,6 @@
                   点击配置
                 </n-button>
               </div>
-              <div
-                class="setting-item"
-                style="
-                  flex-direction: row;
-                  justify-content: space-between;
-                  align-items: center;
-                "
-              >
-                <label class="setting-label">黑市采购清单配置</label>
-                <n-button size="small" @click="openBlackMarketPurchaseModal">
-                  点击配置
-                </n-button>
-              </div>
             </div>
           </div>
           <div class="header-action-box">
