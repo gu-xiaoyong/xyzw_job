@@ -8,7 +8,9 @@
       <p>挑战关卡赢取奖励</p>
     </template>
     <template #badge>
-      <!-- Badge content moved to default slot -->
+      <NTag v-if="season > 0" type="info" size="small" round>
+        第 {{ season }} 赛季
+      </NTag>
     </template>
     <template #default>
       <div class="header-info">
@@ -74,7 +76,7 @@
 </template>
 
 <script setup>
-import { useMessage } from "naive-ui";
+import { NTag, useMessage } from "naive-ui";
 import { computed, ref, watch } from "vue";
 import { useTokenStore } from "@/stores/tokenStore";
 import { extractTowerData, resolveTowerActId } from "@/utils/towerActId.js";
@@ -86,6 +88,7 @@ const message = useMessage();
 const isFighting = ref(false);
 const actId = ref(null);
 const loadError = ref(false);
+const season = ref(0); // 服务端赛季号（resetTime.season，仅取一次）
 const isActivityValid = computed(() => {
   if (!actId.value) return false;
 
@@ -212,6 +215,16 @@ const getInfo = async () => {
       // Try to find daily num if exists in response
       if (data.todayUseTickCnt !== undefined) {
         dailyFightNum.value = data.todayUseTickCnt;
+      }
+    }
+
+    // 赛季号来自角色信息的 resetTime.season，失败不影响主流程
+    if (!season.value) {
+      try {
+        const roleRes = await send("role_getroleinfo", {}, 8000);
+        season.value = Number(roleRes?.resetTime?.season) || 0;
+      } catch {
+        // 下次刷新再取
       }
     }
   } catch (e) {
