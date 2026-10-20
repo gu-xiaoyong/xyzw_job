@@ -16,10 +16,16 @@
         <span class="daily-target" v-if="isActivityValid"
           >今日可挑战 {{ todayInfo }}</span
         >
+        <span class="daily-target" v-else-if="loadError"
+          >活动获取失败，请刷新重试</span
+        >
         <span class="daily-target" v-else>活动已结束</span>
+        <span class="act-id" v-if="actId">活动ID: {{ actId }}</span>
       </div>
 
-      <div v-if="!isActivityValid" class="expired-mask">当前活动已结束</div>
+      <div v-if="!isActivityValid" class="expired-mask">
+        {{ loadError ? "活动获取失败，请刷新重试" : "当前活动已结束" }}
+      </div>
       <div class="boss-grid" :class="{ disabled: !isActivityValid }">
         <div
           v-for="type in 6"
@@ -71,7 +77,7 @@
 import { useMessage } from "naive-ui";
 import { computed, ref, watch } from "vue";
 import { useTokenStore } from "@/stores/tokenStore";
-import { getTowerActId } from "@/utils/towerActId.js";
+import { extractTowerData, resolveTowerActId } from "@/utils/towerActId.js";
 import MyCard from "../Common/MyCard.vue";
 
 const tokenStore = useTokenStore();
@@ -79,6 +85,7 @@ const message = useMessage();
 
 const isFighting = ref(false);
 const actId = ref(null);
+const loadError = ref(false);
 const isActivityValid = computed(() => {
   if (!actId.value) return false;
 
@@ -170,20 +177,28 @@ const getInfo = async () => {
   if (tokenStore.getWebSocketStatus(tokenId) !== "connected") return;
 
   try {
-    const res = await tokenStore.sendMessageWithPromise(
-      tokenId,
-      "towers_getinfo",
-      { actId: getTowerActId() },
-      5000,
-    );
-    if (res) {
-      // Handle nested data structure if necessary
-      const data = res.actId
-        ? res
-        : res.towerData && res.towerData.actId
-          ? res.towerData
-          : res;
+    const send = (cmd, params, timeout) =>
+      tokenStore.sendMessageWithPromise(tokenId, cmd, params, timeout);
 
+    // 已知活动ID时先按原ID查询（快路径），失败或未知再全量探测
+    let data = null;
+    if (actId.value) {
+      const res = await send(
+        "towers_getinfo",
+        { actId: Number(actId.value) },
+        5000,
+      ).catch(() => null);
+      data = extractTowerData(res);
+    }
+    if (!data) {
+      data = await resolveTowerActId(send);
+      loadError.value = !data;
+    } else {
+      loadError.value = false;
+    }
+
+    if (data) {
+      // 以服务器返回的真实 actId 为准
       actId.value = data.actId;
       levelRewardMap.value = data.levelRewardMap || {};
 
@@ -192,7 +207,6 @@ const getInfo = async () => {
         mapSize: Object.keys(levelRewardMap.value).length,
         keys: Object.keys(levelRewardMap.value).slice(0, 10),
         map: levelRewardMap.value,
-        rawRes: res,
       });
 
       // Try to find daily num if exists in response
@@ -219,6 +233,15 @@ const challengeSingle = async (type) => {
   const tokenId = tokenStore.selectedToken.id;
 
   try {
+    // 活动ID未知时先解析一次
+    if (!actId.value) await getInfo();
+
+    const currentActId = actId.value ? Number(actId.value) : null;
+    if (!currentActId) {
+      message.error("未获取到活动ID，请刷新进度后重试");
+      return;
+    }
+
     message.info(`开始挑战 BOSS ${type}`);
 
     let needStart = true;
@@ -230,7 +253,7 @@ const challengeSingle = async (type) => {
         await tokenStore.sendMessageWithPromise(
           tokenId,
           "towers_start",
-          { actId: getTowerActId(), towerType: type },
+          { actId: currentActId, towerType: type },
           5000,
         );
       }
@@ -238,7 +261,7 @@ const challengeSingle = async (type) => {
       const fightRes = await tokenStore.sendMessageWithPromise(
         tokenId,
         "towers_fight",
-        { actId: getTowerActId(), towerType: type },
+        { actId: currentActId, towerType: type },
         5000,
       );
       const battleData = fightRes?.battleData;
@@ -325,6 +348,12 @@ watch(
 
 .daily-target {
   color: var(--text-secondary);
+}
+
+.act-id {
+  margin-left: auto;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .boss-grid {

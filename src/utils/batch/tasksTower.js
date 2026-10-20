@@ -1,5 +1,5 @@
 import { isSameGameValue } from "@/utils/gameValue.js";
-import { getTowerActId } from "../towerActId.js";
+import { resolveTowerActId, extractTowerData } from "../towerActId.js";
 
 /**
  * 爬塔类任务
@@ -891,30 +891,27 @@ export function createTasksTower(deps) {
 
         await ensureConnection(tokenId);
 
-        // 获取活动信息
-        let res = await tokenStore.sendMessageWithPromise(
-          tokenId,
-          "towers_getinfo",
-          { actId: getTowerActId() },
-          5000,
-        );
-
-        let towerData = res.actId
-          ? res
-          : res.towerData && res.towerData.actId
-            ? res.towerData
-            : res;
+        // 自动解析活动ID（期数后缀无法本地推导，探测服务器获取）
+        const send = (cmd, params, timeout) =>
+          tokenStore.sendMessageWithPromise(tokenId, cmd, params, timeout);
+        const towerData = await resolveTowerActId(send);
 
         // 检查活动是否有效
-        if (!towerData.actId) {
+        if (!towerData) {
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `${token.name} 换皮闯关活动信息获取失败`,
+            message: `${token.name} 未探测到进行中的换皮闯关活动`,
             type: "warning",
           });
           tokenStatus.value[tokenId] = "failed";
           return;
         }
+
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${token.name} 已获取活动ID: ${towerData.actId}`,
+          type: "success",
+        });
 
         const actId = String(towerData.actId);
         if (actId.length >= 6) {
@@ -1018,7 +1015,7 @@ export function createTasksTower(deps) {
               await tokenStore.sendMessageWithPromise(
                 tokenId,
                 "towers_start",
-                { actId: getTowerActId(), towerType: type },
+                { actId: Number(actId), towerType: type },
                 5000,
               );
               // 稍微等待一下
@@ -1028,7 +1025,7 @@ export function createTasksTower(deps) {
             const fightRes = await tokenStore.sendMessageWithPromise(
               tokenId,
               "towers_fight",
-              { actId: getTowerActId(), towerType: type },
+              { actId: Number(actId), towerType: type },
               5000,
             );
             const battleData = fightRes?.battleData;
@@ -1047,18 +1044,16 @@ export function createTasksTower(deps) {
               failCount = 0;
 
               // 刷新数据
-              res = await tokenStore.sendMessageWithPromise(
+              const refreshRes = await tokenStore.sendMessageWithPromise(
                 tokenId,
                 "towers_getinfo",
-                { actId: getTowerActId() },
+                { actId: Number(actId) },
                 5000,
               );
-              towerData = res.actId
-                ? res
-                : res.towerData && res.towerData.actId
-                  ? res.towerData
-                  : res;
-              levelRewardMap = towerData.levelRewardMap || {};
+              const refreshData = extractTowerData(refreshRes);
+              if (refreshData) {
+                levelRewardMap = refreshData.levelRewardMap || {};
+              }
 
               if (isTowerCleared(type, levelRewardMap)) {
                 loop = false;
