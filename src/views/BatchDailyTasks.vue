@@ -374,13 +374,6 @@
                 </n-button>
                 <n-button
                   size="small"
-                  @click="collection_claimfreereward"
-                  :disabled="isRunning || selectedTokens.length === 0"
-                >
-                  一键领取珍宝阁
-                </n-button>
-                <n-button
-                  size="small"
                   @click="batchClaimMail"
                   :disabled="isRunning || selectedTokens.length === 0"
                 >
@@ -392,13 +385,6 @@
                   :disabled="isRunning || selectedTokens.length === 0"
                 >
                   一键活跃度奖励
-                </n-button>
-                <n-button
-                  size="small"
-                  @click="batchCampClaimTasks"
-                  :disabled="isRunning || selectedTokens.length === 0"
-                >
-                  一键营地任务奖励
                 </n-button>
                 <n-button
                   size="small"
@@ -427,13 +413,6 @@
                     营地挑战({{ campChallengeModeLabel }})
                   </n-button>
                 </n-popselect>
-                <n-button
-                  size="small"
-                  @click="batchXuanwuBlessing"
-                  :disabled="isRunning || selectedTokens.length === 0"
-                >
-                  一键玄武赐福
-                </n-button>
               </n-space>
             </n-tab-pane>
             <n-tab-pane name="dungeon" tab="副本">
