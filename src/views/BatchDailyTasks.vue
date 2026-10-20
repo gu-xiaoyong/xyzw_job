@@ -3932,7 +3932,6 @@ const taskGroupDefinitions = [
       "batchStudy",
       "batcharenafight",
       "batchCampChallenge",
-      "batchCampChallengePet",
       "batchCampClaimTasks",
       "store_syncpurchaseconfig",
       "store_purchase",
@@ -4068,6 +4067,21 @@ const loadScheduledTasks = () => {
 
       // Ensure we have an array
       scheduledTasks.value = Array.isArray(parsed) ? parsed : [];
+
+      // 清理已下线任务"营地挑战宠物"的残留引用，避免定时任务校验失败
+      let cleaned = false;
+      for (const task of scheduledTasks.value) {
+        if (
+          Array.isArray(task.selectedTasks) &&
+          task.selectedTasks.includes("batchCampChallengePet")
+        ) {
+          task.selectedTasks = task.selectedTasks.filter(
+            (name) => name !== "batchCampChallengePet",
+          );
+          cleaned = true;
+        }
+      }
+      if (cleaned) saveScheduledTasks();
     } else {
       scheduledTasks.value = [];
     }
@@ -5117,7 +5131,6 @@ function getScheduledTask(taskName) {
     batchmengjing,
     batchclubsign,
     batchCampChallenge,
-    batchCampChallengePet,
     batchCampClaimTasks,
     batchApplyLegion,
     batcharenafight,
@@ -6646,8 +6659,7 @@ const {
 } = tasksApex;
 
 const tasksCampChallenge = createTasksCampChallenge(createTaskDeps());
-const { batchCampChallenge, batchCampChallengePet, batchCampClaimTasks } =
-  tasksCampChallenge;
+const { batchCampChallenge, batchCampClaimTasks } = tasksCampChallenge;
 
 const tasksXuanwuBlessing = createTasksXuanwuBlessing(createTaskDeps());
 const { batchXuanwuBlessing } = tasksXuanwuBlessing;
@@ -6656,9 +6668,8 @@ const tasksPKRoom = createTasksPKRoom(createTaskDeps());
 const { batchBookPKMatch } = tasksPKRoom;
 
 // 营地挑战模式选择
-const campChallengeMode = ref("pet");
+const campChallengeMode = ref("random");
 const campChallengeModeOptions = [
-  { label: "挑战宠物", value: "pet" },
   { label: "随机挑战人员", value: "random" },
   { label: "领取任务奖励", value: "claim" },
 ];
@@ -6670,9 +6681,7 @@ const campChallengeModeLabel = computed(() => {
 });
 const onCampChallengeModeChange = async (val) => {
   campChallengeMode.value = val;
-  if (val === "pet") {
-    await batchCampChallengePet();
-  } else if (val === "claim") {
+  if (val === "claim") {
     await batchCampClaimTasks();
   } else {
     await batchCampChallenge();
