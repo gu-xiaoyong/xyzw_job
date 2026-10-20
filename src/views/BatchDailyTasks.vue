@@ -3700,6 +3700,8 @@ const currentSettings = reactive({
   arenaFormation: 1,
   towerFormation: 0,
   bossFormation: 1,
+  // 爬塔阵容一次性迁移标记：旧数据迁移后置 true，避免再覆盖用户手动选择
+  formationMigrated: true,
   bossTimes: 2,
   claimBottle: true,
   payRecruit: true,
@@ -3724,6 +3726,8 @@ const currentTemplate = reactive({
   arenaFormation: 1,
   towerFormation: 0,
   bossFormation: 1,
+  // 爬塔阵容一次性迁移标记：新建/编辑的模板视为已迁移
+  formationMigrated: true,
   bossTimes: 2,
   claimBottle: true,
   payRecruit: true,
@@ -5771,7 +5775,19 @@ const loadSettings = (tokenId) => {
       claimEmail: true,
       blackMarketPurchase: true,
     };
-    return raw ? { ...defaultSettings, ...JSON.parse(raw) } : defaultSettings;
+    // 一次性迁移：旧设置的爬塔阵容统一改为"当前阵容"(0)，迁移后手动选择的值不再覆盖
+    if (!raw) return defaultSettings;
+    const saved = JSON.parse(raw);
+    if (!saved.formationMigrated) {
+      saved.towerFormation = 0;
+      saved.formationMigrated = true;
+      try {
+        localStorage.setItem(`daily-settings:${tokenId}`, JSON.stringify(saved));
+      } catch (e) {
+        // 存储失败不影响本次使用
+      }
+    }
+    return { ...defaultSettings, ...saved };
   } catch (error) {
     console.error("Failed to load settings:", error);
     return null;
@@ -5802,6 +5818,22 @@ const saveSettings = () => {
 const loadTaskTemplates = () => {
   const templates = localStorage.getItem("task-templates");
   const parsed = templates ? JSON.parse(templates) : [];
+  // 一次性迁移：旧模板的爬塔阵容统一改为"当前阵容"(0)，迁移后不再覆盖
+  let migrated = false;
+  for (const template of parsed) {
+    if (template.settings && !template.settings.formationMigrated) {
+      template.settings.towerFormation = 0;
+      template.settings.formationMigrated = true;
+      migrated = true;
+    }
+  }
+  if (migrated) {
+    try {
+      localStorage.setItem("task-templates", JSON.stringify(parsed));
+    } catch (e) {
+      // 存储失败不影响本次使用
+    }
+  }
   taskTemplates.value = parsed;
   return parsed;
 };
@@ -5935,6 +5967,7 @@ const resetTemplateForm = () => {
     arenaFormation: 1,
     towerFormation: 0,
     bossFormation: 1,
+    formationMigrated: true,
     bossTimes: 2,
     claimBottle: true,
     payRecruit: true,
