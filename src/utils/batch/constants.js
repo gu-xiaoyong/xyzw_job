@@ -22,6 +22,12 @@ export const formationOptions = [1, 2, 3, 4, 5, 6].map((v) => ({
   value: v,
 }));
 
+// 爬塔阵容选项：0 = 使用当前阵容（不切换预设队伍）
+export const towerFormationOptions = [
+  { label: "当前阵容", value: 0 },
+  ...formationOptions,
+];
+
 // BOSS次数选项
 export const bossTimesOptions = [0, 1, 2, 3, 4].map((v) => ({
   label: `${v}次`,
@@ -113,7 +119,7 @@ export const taskColumns = [
 // 默认设置
 export const defaultSettings = {
   arenaFormation: 1,
-  towerFormation: 1,
+  towerFormation: 0,
   bossFormation: 1,
   bossTimes: 2,
   claimBottle: true,
@@ -148,7 +154,7 @@ export const defaultBatchSettings = {
 // 默认模板
 export const defaultTemplate = {
   arenaFormation: 1,
-  towerFormation: 1,
+  towerFormation: 0,
   bossFormation: 1,
   bossTimes: 2,
   claimBottle: true,

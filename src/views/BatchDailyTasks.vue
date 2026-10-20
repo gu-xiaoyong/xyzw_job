@@ -818,7 +818,7 @@
             <label class="setting-label">爬塔阵容</label>
             <n-select
               v-model:value="currentSettings.towerFormation"
-              :options="formationOptions"
+              :options="towerFormationOptions"
               size="small"
             />
           </div>
@@ -904,7 +904,7 @@
             <label class="setting-label">爬塔阵容</label>
             <n-select
               v-model:value="currentTemplate.towerFormation"
-              :options="formationOptions"
+              :options="towerFormationOptions"
               size="small"
             />
           </div>
@@ -3232,6 +3232,7 @@ import {
   createTasksXuanwuBlessing,
   fishTypeOptions,
   formationOptions,
+  towerFormationOptions,
   getTodayStartSec,
   isTodayAvailable,
   matchesCronExpression,
@@ -3697,7 +3698,7 @@ const currentSettingsTokenId = ref(null);
 const currentSettingsTokenName = ref("");
 const currentSettings = reactive({
   arenaFormation: 1,
-  towerFormation: 1,
+  towerFormation: 0,
   bossFormation: 1,
   bossTimes: 2,
   claimBottle: true,
@@ -3721,7 +3722,7 @@ const currentTemplateName = ref("");
 const currentTemplateId = ref(null); // 用于编辑现有模板
 const currentTemplate = reactive({
   arenaFormation: 1,
-  towerFormation: 1,
+  towerFormation: 0,
   bossFormation: 1,
   bossTimes: 2,
   claimBottle: true,
@@ -5759,7 +5760,7 @@ const loadSettings = (tokenId) => {
     const raw = localStorage.getItem(`daily-settings:${tokenId}`);
     const defaultSettings = {
       arenaFormation: 1,
-      towerFormation: 1,
+      towerFormation: 0,
       bossFormation: 1,
       bossTimes: 2,
       claimBottle: true,
@@ -5932,7 +5933,7 @@ const resetTemplateForm = () => {
   currentTemplateName.value = "";
   Object.assign(currentTemplate, {
     arenaFormation: 1,
-    towerFormation: 1,
+    towerFormation: 0,
     bossFormation: 1,
     bossTimes: 2,
     claimBottle: true,
