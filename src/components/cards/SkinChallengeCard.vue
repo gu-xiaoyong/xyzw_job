@@ -205,13 +205,6 @@ const getInfo = async () => {
       actId.value = data.actId;
       levelRewardMap.value = data.levelRewardMap || {};
 
-      console.log("SkinChallenge Info:", {
-        actId: data.actId,
-        mapSize: Object.keys(levelRewardMap.value).length,
-        keys: Object.keys(levelRewardMap.value).slice(0, 10),
-        map: levelRewardMap.value,
-      });
-
       // Try to find daily num if exists in response
       if (data.todayUseTickCnt !== undefined) {
         dailyFightNum.value = data.todayUseTickCnt;
@@ -326,6 +319,12 @@ const challengeSingle = async (type) => {
 watch(
   () => tokenStore.selectedToken,
   (newVal) => {
+    // 切换账号时重置活动状态，避免沿用上一个账号的活动ID/赛季/进度
+    actId.value = null;
+    season.value = 0;
+    loadError.value = false;
+    levelRewardMap.value = {};
+    dailyFightNum.value = 0;
     if (newVal) {
       setTimeout(getInfo, 1000);
     }

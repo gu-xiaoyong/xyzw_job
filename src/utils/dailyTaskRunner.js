@@ -753,6 +753,7 @@ export class DailyTaskRunner {
 
     // 4. 固定奖励
     // 卡包：以角色 cardTime 为准遍历所有卡（免费/周卡/月卡/永久卡…），今天未领的逐个领取；
+    // 候选集兜底并入免费卡(1)与永久卡(4003)，防止服务器 cardTime 不含免费卡时漏领；
     // 未购买的卡服务器返回 1400010，按跳过处理
     const CARD_LABELS = {
       1: "领取免费礼包",
@@ -760,12 +761,11 @@ export class DailyTaskRunner {
       4002: "领取月卡礼包",
       4003: "领取永久卡礼包",
     };
-    const cardTimeEntries = Object.entries(roleData.cardTime ?? {}).filter(
-      ([cardId]) => Number(cardId) > 0,
-    );
-    if (cardTimeEntries.length === 0) {
-      cardTimeEntries.push(["1", null], ["4003", null]);
-    }
+    const cardTime = roleData.cardTime ?? {};
+    const cardTimeEntries = [...new Set(["1", "4003", ...Object.keys(cardTime)])]
+      .filter((cardId) => Number(cardId) > 0)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((cardId) => [cardId, cardTime[cardId] ?? null]);
     const fixedRewards = [
       ...(Object.values(roleData.signInReward ?? {}).some(
         (stamp) => !isTodayAvailable(stamp),
