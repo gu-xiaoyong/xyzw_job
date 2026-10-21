@@ -754,7 +754,11 @@ export class DailyTaskRunner {
     // 4. 固定奖励
     // 卡包：以角色 cardTime 为准遍历所有卡（免费/周卡/月卡/永久卡…），今天未领的逐个领取；
     // 未购买的卡服务器返回 1400010，按跳过处理
-    const CARD_LABELS = { 1: "领取免费礼包", 4003: "领取永久卡礼包" };
+    const CARD_LABELS = {
+      1: "领取免费礼包",
+      4001: "领取周卡礼包",
+      4003: "领取永久卡礼包",
+    };
     const cardTimeEntries = Object.entries(roleData.cardTime ?? {}).filter(
       ([cardId]) => Number(cardId) > 0,
     );
