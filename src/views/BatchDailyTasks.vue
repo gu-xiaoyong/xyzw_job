@@ -3212,6 +3212,7 @@ import {
   normalizeBlackMarketPurchaseList,
 } from "@/utils/batch/blackMarketConfig";
 import { DailyTaskRunner } from "@/utils/dailyTaskRunner";
+import { dailySettingsDefaults } from "@/utils/dailyTaskState";
 import { goldItemsConfig, merchantConfig } from "@/utils/dreamConstants";
 
 import { toBase64Url } from "@/utils/encoding";
@@ -3663,19 +3664,9 @@ const showSettingsModal = ref(false);
 const currentSettingsTokenId = ref(null);
 const currentSettingsTokenName = ref("");
 const currentSettings = reactive({
-  arenaFormation: 1,
-  towerFormation: 0,
-  bossFormation: 1,
+  ...dailySettingsDefaults,
   // 爬塔阵容一次性迁移标记：旧数据迁移后置 true，避免再覆盖用户手动选择
   formationMigrated: true,
-  bossTimes: 2,
-  claimBottle: true,
-  payRecruit: true,
-  openBox: true,
-  arenaEnable: true,
-  claimHangUp: true,
-  claimEmail: true,
-  blackMarketPurchase: true,
 });
 
 // Task Template State
@@ -3689,19 +3680,9 @@ const selectedTokensForApply = ref([]);
 const currentTemplateName = ref("");
 const currentTemplateId = ref(null); // 用于编辑现有模板
 const currentTemplate = reactive({
-  arenaFormation: 1,
-  towerFormation: 0,
-  bossFormation: 1,
+  ...dailySettingsDefaults,
   // 爬塔阵容一次性迁移标记：新建/编辑的模板视为已迁移
   formationMigrated: true,
-  bossTimes: 2,
-  claimBottle: true,
-  payRecruit: true,
-  openBox: true,
-  arenaEnable: true,
-  claimHangUp: true,
-  claimEmail: true,
-  blackMarketPurchase: true,
 });
 
 // Account Template References
@@ -5741,32 +5722,22 @@ const clearAllItems = () => {
 const loadSettings = (tokenId) => {
   try {
     const raw = localStorage.getItem(`daily-settings:${tokenId}`);
-    const defaultSettings = {
-      arenaFormation: 1,
-      towerFormation: 0,
-      bossFormation: 1,
-      bossTimes: 2,
-      claimBottle: true,
-      payRecruit: true,
-      openBox: true,
-      arenaEnable: true,
-      claimHangUp: true,
-      claimEmail: true,
-      blackMarketPurchase: true,
-    };
     // 一次性迁移：旧设置的爬塔阵容统一改为"当前阵容"(0)，迁移后手动选择的值不再覆盖
-    if (!raw) return defaultSettings;
+    if (!raw) return { ...dailySettingsDefaults };
     const saved = JSON.parse(raw);
     if (!saved.formationMigrated) {
       saved.towerFormation = 0;
       saved.formationMigrated = true;
       try {
-        localStorage.setItem(`daily-settings:${tokenId}`, JSON.stringify(saved));
+        localStorage.setItem(
+          `daily-settings:${tokenId}`,
+          JSON.stringify(saved),
+        );
       } catch (e) {
         // 存储失败不影响本次使用
       }
     }
-    return { ...defaultSettings, ...saved };
+    return { ...dailySettingsDefaults, ...saved };
   } catch (error) {
     console.error("Failed to load settings:", error);
     return null;
@@ -5943,18 +5914,8 @@ const resetTemplateForm = () => {
   currentTemplateId.value = null;
   currentTemplateName.value = "";
   Object.assign(currentTemplate, {
-    arenaFormation: 1,
-    towerFormation: 0,
-    bossFormation: 1,
+    ...dailySettingsDefaults,
     formationMigrated: true,
-    bossTimes: 2,
-    claimBottle: true,
-    payRecruit: true,
-    openBox: true,
-    arenaEnable: true,
-    claimHangUp: true,
-    claimEmail: true,
-    blackMarketPurchase: true,
   });
 };
 

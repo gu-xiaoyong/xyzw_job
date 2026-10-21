@@ -4,6 +4,23 @@ const activeTokenRuns = new Set();
 // The official HangUpInviteDialog exposes four help slots, independently of daily tasks.
 const HANG_UP_HELP_SLOTS = 4;
 
+// 日常任务共享设置默认值（存储键 daily-settings:<tokenId>，
+// 批量页/单账号页/日常执行器统一从这里取，避免多份默认值漂移）
+export const dailySettingsDefaults = {
+  arenaFormation: 1,
+  towerFormation: 0, // 0 = 使用当前阵容（不切换预设队伍）
+  bossFormation: 1,
+  bossTimes: 2,
+  claimBottle: true,
+  payRecruit: true,
+  openBox: true,
+  arenaEnable: true,
+  claimHangUp: true,
+  claimEmail: true,
+  blackMarketPurchase: true,
+  freeGachaEnable: true,
+};
+
 /**
  * Keep daily and hang-up operations for one account from overlapping.
  * @param {string} tokenId Account identity.

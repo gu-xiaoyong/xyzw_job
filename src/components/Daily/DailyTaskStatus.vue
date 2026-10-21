@@ -301,9 +301,11 @@ import {
 import { useTokenStore } from "@/stores/tokenStore";
 import { DailyTaskRunner } from "@/utils/dailyTaskRunner";
 import {
+  dailySettingsDefaults,
   getDailyTaskStates,
   loadDailyTaskConfig,
 } from "@/utils/dailyTaskState";
+import { bossTimesOptions, formationOptions } from "@/utils/batch/constants";
 
 const tokenStore = useTokenStore();
 const message = useMessage();
@@ -315,18 +317,11 @@ const showLog = ref(false);
 const busy = ref(false);
 const logContainer = ref(null);
 
-// 任务设置
+// 任务设置（与批量页/日常执行器共用同一存储键和默认值）
 const settings = reactive({
-  arenaFormation: 1,
-  bossFormation: 1,
-  bossTimes: 2,
-  claimBottle: true,
-  payRecruit: true,
-  openBox: true,
-  arenaEnable: true,
-  claimHangUp: true,
-  claimEmail: true,
-  blackMarketPurchase: true,
+  ...dailySettingsDefaults,
+  // 爬塔阵容迁移标记：本页保存时带上，避免批量页的迁移逻辑被重复触发
+  formationMigrated: true,
   commandDelay: 500,
   taskDelay: 500,
 });
@@ -349,15 +344,7 @@ const tasks = ref([
   { id: 14, name: "收获1个任意盐罐", completed: false },
 ]);
 
-// 选项配置
-const formationOptions = [1, 2, 3, 4, 5, 6].map((v) => ({
-  label: `阵容${v}`,
-  value: v,
-}));
-const bossTimesOptions = [0, 1, 2, 3, 4].map((v) => ({
-  label: `${v}次`,
-  value: v,
-}));
+// 选项配置 formationOptions / bossTimesOptions 从 @/utils/batch/constants 导入
 
 // 计算属性
 const roleInfo = computed(() => {

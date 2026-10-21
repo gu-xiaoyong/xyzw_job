@@ -115,20 +115,8 @@ export const taskColumns = [
   { title: "操作", key: "actions", width: 150 },
 ];
 
-// 默认设置
-export const defaultSettings = {
-  arenaFormation: 1,
-  towerFormation: 0,
-  bossFormation: 1,
-  bossTimes: 2,
-  claimBottle: true,
-  payRecruit: true,
-  openBox: true,
-  arenaEnable: true,
-  claimHangUp: true,
-  claimEmail: true,
-  blackMarketPurchase: true,
-};
+// 日常任务设置默认值已统一到 @/utils/dailyTaskState 的 dailySettingsDefaults
+// （存储键 daily-settings:<tokenId>，批量页/单账号页/执行器共用）
 
 // 默认批量设置
 export const defaultBatchSettings = {
@@ -148,21 +136,6 @@ export const defaultBatchSettings = {
   maxLogEntries: 1000,
   cdkCodes: "",
   cdkPlatformType: "h5",
-};
-
-// 默认模板
-export const defaultTemplate = {
-  arenaFormation: 1,
-  towerFormation: 0,
-  bossFormation: 1,
-  bossTimes: 2,
-  claimBottle: true,
-  payRecruit: true,
-  openBox: true,
-  arenaEnable: true,
-  claimHangUp: true,
-  claimEmail: true,
-  blackMarketPurchase: true,
 };
 
 // 默认任务表单

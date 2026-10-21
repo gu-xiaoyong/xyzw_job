@@ -1,4 +1,5 @@
 import {
+  dailySettingsDefaults,
   fillHangUpTime,
   getClaimablePointRewards,
   getDailyTaskStates,
@@ -217,20 +218,9 @@ export class DailyTaskRunner {
   loadSettings(roleId) {
     try {
       const raw = localStorage.getItem(`daily-settings:${roleId}`);
-      const defaultSettings = {
-        arenaFormation: 1,
-        bossFormation: 1,
-        bossTimes: 2,
-        claimBottle: true,
-        payRecruit: true,
-        openBox: true,
-        arenaEnable: true,
-        claimHangUp: true,
-        claimEmail: true,
-        blackMarketPurchase: true,
-        freeGachaEnable: true,
-      };
-      return raw ? { ...defaultSettings, ...JSON.parse(raw) } : defaultSettings;
+      return raw
+        ? { ...dailySettingsDefaults, ...JSON.parse(raw) }
+        : { ...dailySettingsDefaults };
     } catch (error) {
       console.error("Failed to load settings:", error);
       return null;
@@ -762,7 +752,9 @@ export class DailyTaskRunner {
       4003: "领取永久卡礼包",
     };
     const cardTime = roleData.cardTime ?? {};
-    const cardTimeEntries = [...new Set(["1", "4003", ...Object.keys(cardTime)])]
+    const cardTimeEntries = [
+      ...new Set(["1", "4003", ...Object.keys(cardTime)]),
+    ]
       .filter((cardId) => Number(cardId) > 0)
       .sort((a, b) => Number(a) - Number(b))
       .map((cardId) => [cardId, cardTime[cardId] ?? null]);
