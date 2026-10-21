@@ -831,68 +831,13 @@
     />
 
     <!-- Helper Modal (开箱/钓鱼/招募/按积分开箱) -->
-    <n-modal
+    <HelperModal
       v-model:show="showHelperModal"
-      preset="card"
       :title="helperModalTitle"
-      style="width: 90%; max-width: 400px"
-    >
-      <div class="settings-content">
-        <div class="settings-grid">
-          <div class="setting-item" v-if="helperType === 'box'">
-            <label class="setting-label">宝箱类型</label>
-            <n-select
-              v-model:value="helperSettings.boxType"
-              :options="boxTypeOptions"
-              size="small"
-            />
-          </div>
-          <div class="setting-item" v-if="helperType === 'fish'">
-            <label class="setting-label">鱼竿类型</label>
-            <n-select
-              v-model:value="helperSettings.fishType"
-              :options="fishTypeOptions"
-              size="small"
-            />
-          </div>
-          <div class="setting-item" v-if="helperType === 'pointsBox'">
-            <label class="setting-label">目标积分</label>
-            <n-input-number
-              v-model:value="helperSettings.targetPoints"
-              :min="1"
-              :max="1000000"
-              :step="100"
-              size="small"
-              style="width: 100%"
-            />
-          </div>
-          <n-alert
-            v-if="helperType === 'pointsBox'"
-            type="info"
-            style="margin-bottom: 12px"
-          >
-            开箱优先级: 木质宝箱(保留200个) → 青铜宝箱 → 黄金宝箱 → 铂金宝箱<br />
-            积分: 木质=1分, 青铜=10分, 黄金=20分, 铂金=50分
-          </n-alert>
-          <div class="setting-item" v-if="helperType !== 'pointsBox'">
-            <label class="setting-label">消耗数量（10的倍数）</label>
-            <n-input-number
-              v-model:value="helperSettings.count"
-              :min="10"
-              :max="10000"
-              :step="10"
-              size="small"
-            />
-          </div>
-        </div>
-        <div class="modal-actions" style="margin-top: 20px; text-align: right">
-          <n-button @click="showHelperModal = false" style="margin-right: 12px"
-            >取消</n-button
-          >
-          <n-button type="primary" @click="executeHelper">开始执行</n-button>
-        </div>
-      </div>
-    </n-modal>
+      :helper-type="helperType"
+      :helper-settings="helperSettings"
+      @execute="executeHelper"
+    />
 
     <!-- Redeem Code Modal -->
     <RedeemCodeModal
@@ -928,186 +873,34 @@
 
     <!-- Tasks List Modal -->
     <n-modal
+    <ScheduledTaskListModal
       v-model:show="showTasksModal"
-      preset="card"
-      title="定时任务列表"
-      style="width: 90%; max-width: 800px"
-    >
-      <div class="tasks-list" style="max-height: 600px; overflow-y: auto">
-        <div
-          v-for="task in scheduledTasks"
-          :key="task.id"
-          class="task-item"
-          style="
-            margin-bottom: 16px;
-            padding: 12px;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-          "
-        >
-          <div
-            style="
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              margin-bottom: 8px;
-            "
-          >
-            <div style="font-weight: bold">{{ task.name }}</div>
-            <n-switch
-              v-model:value="task.enabled"
-              @update:value="toggleTaskEnabled(task.id, $event)"
-            >
-            </n-switch>
-          </div>
-          <div style="margin-bottom: 4px">
-            <span style="color: #6b7280">运行类型：</span>
-            <span>{{
-              task.runType === "daily" ? "每天固定时间" : "Cron表达式"
-            }}</span>
-          </div>
-          <div style="margin-bottom: 4px">
-            <span style="color: #6b7280">运行时间：</span>
-            <span>{{
-              task.runType === "daily" ? task.runTime : task.cronExpression
-            }}</span>
-          </div>
-          <div style="margin-bottom: 4px">
-            <span style="color: #6b7280">下次执行：</span>
-            <TaskCountdown :task="task" />
-          </div>
-          <div style="margin-bottom: 4px">
-            <span style="color: #6b7280">选中账号：</span>
-            <span>{{ task.selectedTokens.length }} 个</span>
-          </div>
-          <div style="margin-bottom: 8px">
-            <span style="color: #6b7280">选中任务：</span>
-            <span>{{ task.selectedTasks.length }} 个</span>
-          </div>
-          <div style="display: flex; gap: 8px">
-            <n-button size="tiny" @click="editTask(task)"> 编辑 </n-button>
-            <n-button size="tiny" type="error" @click="deleteTask(task.id)">
-              删除
-            </n-button>
-            <n-button
-              size="tiny"
-              type="info"
-              secondary
-              :loading="executingTaskIds.includes(task.id)"
-              @click="manualExecuteTask(task)"
-            >
-              立即执行
-            </n-button>
-          </div>
-        </div>
-        <div
-          v-if="scheduledTasks.length === 0"
-          style="text-align: center; padding: 24px; color: #6b7280"
-        >
-          暂无定时任务
-        </div>
-      </div>
-    </n-modal>
+      :tasks="scheduledTasks"
+      :executing-task-ids="executingTaskIds"
+      @toggle="toggleTaskEnabled"
+      @edit="editTask"
+      @delete="deleteTask"
+      @execute="manualExecuteTask"
+    />
 
     <!-- 云端定时面板 -->
-    <n-modal
+    <CloudCronModal
       v-model:show="showCloudModal"
-      preset="card"
-      title="云端定时（服务端自动执行，无需保持页面打开）"
-      style="width: 92%; max-width: 640px"
-    >
-      <div class="settings-content">
-        <div class="setting-item">
-          <label class="setting-label">后端服务地址</label>
-          <n-input
-            v-model:value="cloudBackendUrl"
-            placeholder="例如 https://xyzw-backend.onrender.com"
-            clearable
-          />
-        </div>
-        <div class="setting-item">
-          <label class="setting-label">访问密钥（后端 BACKEND_KEY）</label>
-          <n-input
-            v-model:value="cloudBackendKey"
-            type="password"
-            show-password-on="click"
-            placeholder="与后端环境变量 BACKEND_KEY 一致"
-          />
-        </div>
-        <n-space>
-          <n-button
-            size="small"
-            :loading="cloudTesting"
-            @click="cloudTestConnection"
-          >
-            测试连接
-          </n-button>
-          <n-button
-            size="small"
-            type="primary"
-            :loading="cloudSyncing"
-            @click="cloudSync"
-          >
-            同步 Token 与定时任务
-          </n-button>
-          <n-button
-            size="small"
-            :loading="cloudTestResultsLoading"
-            @click="cloudTestAllTokens"
-          >
-            测试Token有效性
-          </n-button>
-          <n-button
-            size="small"
-            :loading="cloudLogLoading"
-            @click="cloudLoadLogs"
-          >
-            刷新云端日志
-          </n-button>
-        </n-space>
-        <div
-          v-if="cloudStatus"
-          class="cloud-status"
-          :style="{ color: cloudStatusOk ? '#18a058' : '#d03050' }"
-        >
-          {{ cloudStatus }}
-        </div>
-        <div v-if="cloudTestResults.length" class="cloud-test-results">
-          <div
-            v-for="r in cloudTestResults"
-            :key="r.id"
-            style="font-size: 13px; line-height: 1.8"
-          >
-            {{ r.ok ? "✅" : "❌" }} {{ r.name }}:
-            {{ r.ok ? `有效（${r.detail}）` : r.error }}
-          </div>
-        </div>
-        <div v-if="cloudLogs.length" class="cloud-logs">
-          <div v-for="(log, i) in cloudLogs" :key="i" class="cloud-log-line">
-            <span
-              :style="{
-                color:
-                  log.status === 'success'
-                    ? '#18a058'
-                    : log.status === 'error'
-                      ? '#d03050'
-                      : '#6b7280',
-              }"
-            >
-              [{{ log.created_at?.slice(5, 16).replace("T", " ") }}]
-              {{ log.token_name }} {{ log.task_type }}: {{ log.status
-              }}{{ log.message ? ` - ${log.message}` : "" }}
-            </span>
-          </div>
-        </div>
-        <n-alert type="warning" :show-icon="false" style="margin-top: 8px">
-          同步会把 Token
-          明文上传到云端数据库、定时由服务端执行。仅支持领取类任务
-          （日常礼包/挂机/爬塔/功法/活跃度/逐鹿盐山任务/珍宝阁/答题/签到/灯神），
-          其余复杂任务会在同步时跳过。
-        </n-alert>
-      </div>
-    </n-modal>
+      v-model:backend-url="cloudBackendUrl"
+      v-model:backend-key="cloudBackendKey"
+      :cloud-testing="cloudTesting"
+      :cloud-syncing="cloudSyncing"
+      :cloud-test-results-loading="cloudTestResultsLoading"
+      :cloud-log-loading="cloudLogLoading"
+      :cloud-status="cloudStatus"
+      :cloud-status-ok="cloudStatusOk"
+      :cloud-test-results="cloudTestResults"
+      :cloud-logs="cloudLogs"
+      @test="cloudTestConnection"
+      @sync="cloudSync"
+      @test-tokens="cloudTestAllTokens"
+      @load-logs="cloudLoadLogs"
+    />
 
     <!-- Task Modal -->
     <n-modal
@@ -1872,6 +1665,9 @@ import AccountTemplateRefModal from "@/components/Batch/AccountTemplateRefModal.
 import DreamShopModal from "@/components/Batch/DreamShopModal.vue";
 import BlackMarketModal from "@/components/Batch/BlackMarketModal.vue";
 import TokenSettingsModal from "@/components/Batch/TokenSettingsModal.vue";
+import HelperModal from "@/components/Batch/HelperModal.vue";
+import ScheduledTaskListModal from "@/components/Batch/ScheduledTaskListModal.vue";
+import CloudCronModal from "@/components/Batch/CloudCronModal.vue";
 import TemplateEditModal from "@/components/Batch/TemplateEditModal.vue";
 import ApplyTemplateModal from "@/components/Batch/ApplyTemplateModal.vue";
 import TemplateManageModal from "@/components/Batch/TemplateManageModal.vue";
