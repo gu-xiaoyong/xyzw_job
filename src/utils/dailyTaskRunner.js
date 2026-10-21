@@ -511,6 +511,70 @@ export class DailyTaskRunner {
       });
     }
 
+    // 功法残卷：纯领取类步骤。探索未开始先开启；无积累/间隔未到均属正常不算失败
+    taskList.push({
+      name: "领取功法残卷",
+      execute: async () => {
+        const level = this.roleLevels[tokenId];
+        if (level !== undefined && Number(level) < ALT_ACCOUNT_LEVEL) {
+          this.log("等级不足，功法未解锁，跳过", "info");
+          return true;
+        }
+        try {
+          const info = await this.sendRequest(tokenId, () =>
+            this.tokenStore.sendMessageWithPromise(
+              tokenId,
+              "legacy_getinfo",
+              {},
+              8000,
+            ),
+          );
+          if (!Number(info?.roleLegacy?.hangUpBeginTime)) {
+            try {
+              await this.executeGameCommand(
+                tokenId,
+                "legacy_beginhangup",
+                {},
+                "开始功法探索",
+              );
+            } catch (error) {
+              // 200020 = 探索已在进行中
+              if (extractErrorCode(error) !== 200020) throw error;
+              this.log("功法探索已在进行中", "info");
+            }
+          }
+          // description 留空：成功/失败日志由本步骤按错误码自行分级记录
+          const res = await this.executeGameCommand(
+            tokenId,
+            "legacy_claimhangup",
+            {},
+            "",
+          );
+          const reward = res?.reward?.[0]?.value;
+          const owned =
+            res?.role?.items?.[37007]?.quantity ??
+            res?.role?.items?.["37007"]?.quantity;
+          this.log(
+            `领取功法残卷成功${reward !== undefined ? ` ${reward} 个` : ""}${owned !== undefined ? `，现有 ${owned} 个` : ""}`,
+            "success",
+          );
+          return true;
+        } catch (error) {
+          const code = extractErrorCode(error);
+          if (code === 200020) {
+            this.log("功法残卷暂无可领取（探索刚开启时正常）", "info");
+            return true;
+          }
+          if (code === 12400000) {
+            this.log("功法残卷领取间隔未到，稍后再领", "info");
+            return true;
+          }
+          this.log(`领取功法残卷失败: ${error.message || "未知错误"}`, "error");
+          throw error;
+        }
+      },
+    });
+
     if (!isTaskCompleted(7) && settings.openBox) {
       taskList.push({
         name: "开启木质宝箱",
