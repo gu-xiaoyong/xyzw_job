@@ -751,6 +751,15 @@ export class DailyTaskRunner {
     }
 
     // 4. 固定奖励
+    // 卡包：以角色 cardTime 为准遍历所有卡（免费/周卡/月卡/永久卡…），今天未领的逐个领取；
+    // 未购买的卡服务器返回 1400010，按跳过处理
+    const CARD_LABELS = { 1: "领取免费礼包", 4003: "领取永久卡礼包" };
+    const cardTimeEntries = Object.entries(roleData.cardTime ?? {}).filter(
+      ([cardId]) => Number(cardId) > 0,
+    );
+    if (cardTimeEntries.length === 0) {
+      cardTimeEntries.push(["1", null], ["4003", null]);
+    }
     const fixedRewards = [
       ...(Object.values(roleData.signInReward ?? {}).some(
         (stamp) => !isTodayAvailable(stamp),
@@ -761,18 +770,14 @@ export class DailyTaskRunner {
         ? [{ name: "俱乐部", cmd: "legion_signin" }]
         : []),
       { name: "领取每日礼包", cmd: "discount_claimreward" },
-      ...(isTodayAvailable(roleData.cardTime?.[1]?.lastClaimTime)
-        ? [{ name: "领取免费礼包", cmd: "card_claimreward" }]
-        : []),
-      ...(isTodayAvailable(roleData.cardTime?.[4003]?.lastClaimTime)
-        ? [
-            {
-              name: "领取永久卡礼包",
-              cmd: "card_claimreward",
-              params: { cardId: 4003 },
-            },
-          ]
-        : []),
+      ...cardTimeEntries
+        .filter(([, cardInfo]) => isTodayAvailable(cardInfo?.lastClaimTime))
+        .map(([cardId]) => ({
+          name: CARD_LABELS[Number(cardId)] || `领取卡包礼包(cardId ${cardId})`,
+          cmd: "card_claimreward",
+          params: Number(cardId) === 1 ? {} : { cardId: Number(cardId) },
+          skipIfUnowned: true,
+        })),
     ];
 
     if (settings.claimEmail) {
@@ -785,13 +790,23 @@ export class DailyTaskRunner {
     fixedRewards.forEach((reward) => {
       taskList.push({
         name: reward.name,
-        execute: () =>
-          this.executeGameCommand(
-            tokenId,
-            reward.cmd,
-            reward.params || {},
-            reward.name,
-          ),
+        execute: async () => {
+          try {
+            return await this.executeGameCommand(
+              tokenId,
+              reward.cmd,
+              reward.params || {},
+              reward.name,
+            );
+          } catch (error) {
+            // 未购买该卡（1400010）：属正常情况，跳过不算失败
+            if (reward.skipIfUnowned && extractErrorCode(error) === 1400010) {
+              this.log(`${reward.name}: 未购买该卡，跳过`, "info");
+              return true;
+            }
+            throw error;
+          }
+        },
       });
     });
 
