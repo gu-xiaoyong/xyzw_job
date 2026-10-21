@@ -617,22 +617,38 @@ export class DailyTaskRunner {
       });
     }
 
-    // 2. 竞技场
-    if (!isTaskCompleted(13) && settings.arenaEnable) {
+    // 2. 竞技场：把每日 3 次免费次数用完为止。
+    // 服务器任务13的进度=今日实际战斗场次（不封顶，如 3/1），据此补足剩余免费次数；
+    // 任务是否已领奖不影响战斗（免费次数与任务奖励是两回事），故不挂 condition
+    if (settings.arenaEnable) {
       taskList.push({
         name: "竞技场战斗",
-        condition: 13,
         execute: async () => {
           this.log("开始竞技场战斗流程");
           const hour = new Date().getHours();
           if (hour < 6) {
             this.log("当前时间未到6点，跳过竞技场战斗", "warning");
-            return false;
+            return true;
           }
           if (hour > 22) {
             this.log("当前时间已过22点，跳过竞技场战斗", "warning");
-            return false;
+            return true;
           }
+
+          const task13 = this.getTaskState(13);
+          if (task13.status === "claimed") {
+            // 已领奖说明当天套件已跑过：免费次数已在之前用完，重跑不再打（防止烧门票）
+            this.log("今日竞技场任务已领奖，免费次数已用完，跳过", "info");
+            return true;
+          }
+          // 未领奖时进度=今日实际场次（不封顶，如 3/1）
+          const foughtToday = Math.min(3, Math.floor(task13.progress || 0));
+          const arenaAttempts = 3 - foughtToday;
+          if (arenaAttempts <= 0) {
+            this.log("今日3次免费竞技场次数已用完，跳过", "info");
+            return true;
+          }
+          this.log(`今日免费竞技场剩余 ${arenaAttempts} 次`);
 
           await this.switchToFormationIfNeeded(
             tokenId,
@@ -646,7 +662,6 @@ export class DailyTaskRunner {
             "开始竞技场",
           );
 
-          const arenaAttempts = Math.min(3, this.getTaskState(13).remaining);
           for (let i = 1; i <= arenaAttempts; i++) {
             this.log(`竞技场战斗 ${i}/${arenaAttempts}`);
             const targets = await this.executeGameCommand(
@@ -674,6 +689,7 @@ export class DailyTaskRunner {
             }
             await this.sleep(1000);
           }
+          return true;
         },
       });
     }
