@@ -764,373 +764,45 @@
     </div>
 
     <!-- Settings Modal -->
-    <n-modal
+    <TokenSettingsModal
       v-model:show="showSettingsModal"
-      preset="card"
-      :title="`任务设置 - ${currentSettingsTokenName}`"
-      style="width: 90%; max-width: 400px"
-    >
-      <div class="settings-content">
-        <div class="settings-grid">
-          <div class="setting-item">
-            <label class="setting-label">竞技场阵容</label>
-            <n-select
-              v-model:value="currentSettings.arenaFormation"
-              :options="formationOptions"
-              size="small"
-            />
-          </div>
-          <div class="setting-item">
-            <label class="setting-label">爬塔阵容</label>
-            <n-select
-              v-model:value="currentSettings.towerFormation"
-              :options="towerFormationOptions"
-              size="small"
-            />
-          </div>
-          <div class="setting-item">
-            <label class="setting-label">BOSS阵容</label>
-            <n-select
-              v-model:value="currentSettings.bossFormation"
-              :options="formationOptions"
-              size="small"
-            />
-          </div>
-          <div class="setting-item">
-            <label class="setting-label">BOSS次数</label>
-            <n-select
-              v-model:value="currentSettings.bossTimes"
-              :options="bossTimesOptions"
-              size="small"
-            />
-          </div>
-          <div class="setting-switches">
-            <div class="switch-row">
-              <span class="switch-label">领罐子</span
-              ><n-switch v-model:value="currentSettings.claimBottle" />
-            </div>
-            <div class="switch-row">
-              <span class="switch-label">领挂机</span
-              ><n-switch v-model:value="currentSettings.claimHangUp" />
-            </div>
-            <div class="switch-row">
-              <span class="switch-label">竞技场</span
-              ><n-switch v-model:value="currentSettings.arenaEnable" />
-            </div>
-            <div class="switch-row">
-              <span class="switch-label">开宝箱</span
-              ><n-switch v-model:value="currentSettings.openBox" />
-            </div>
-            <div class="switch-row">
-              <span class="switch-label">领取邮件奖励</span
-              ><n-switch v-model:value="currentSettings.claimEmail" />
-            </div>
-            <div class="switch-row">
-              <span class="switch-label">黑市购买物品</span
-              ><n-switch v-model:value="currentSettings.blackMarketPurchase" />
-            </div>
-            <div class="switch-row">
-              <span class="switch-label">付费招募</span
-              ><n-switch v-model:value="currentSettings.payRecruit" />
-            </div>
-          </div>
-        </div>
-        <div class="modal-actions" style="margin-top: 20px; text-align: right">
-          <n-button type="primary" @click="saveSettings">保存设置</n-button>
-        </div>
-      </div>
-    </n-modal>
+      :current-settings="currentSettings"
+      :token-name="currentSettingsTokenName"
+      @save="saveSettings"
+    />
 
     <!-- Task Template Modal -->
-    <n-modal
+    <TemplateEditModal
       v-model:show="showTaskTemplateModal"
-      preset="card"
-      :title="currentTemplateId ? '编辑任务模板' : '任务模板设置'"
-      style="width: 90%; max-width: 400px"
-    >
-      <div class="settings-content">
-        <div class="settings-grid">
-          <div class="setting-item">
-            <label class="setting-label">模板名称</label>
-            <n-input
-              v-model:value="currentTemplateName"
-              placeholder="请输入模板名称"
-              size="small"
-            />
-          </div>
-          <div class="setting-item">
-            <label class="setting-label">竞技场阵容</label>
-            <n-select
-              v-model:value="currentTemplate.arenaFormation"
-              :options="formationOptions"
-              size="small"
-            />
-          </div>
-          <div class="setting-item">
-            <label class="setting-label">爬塔阵容</label>
-            <n-select
-              v-model:value="currentTemplate.towerFormation"
-              :options="towerFormationOptions"
-              size="small"
-            />
-          </div>
-          <div class="setting-item">
-            <label class="setting-label">BOSS阵容</label>
-            <n-select
-              v-model:value="currentTemplate.bossFormation"
-              :options="formationOptions"
-              size="small"
-            />
-          </div>
-          <div class="setting-item">
-            <label class="setting-label">BOSS次数</label>
-            <n-select
-              v-model:value="currentTemplate.bossTimes"
-              :options="bossTimesOptions"
-              size="small"
-            />
-          </div>
-          <div class="setting-switches">
-            <div class="switch-row">
-              <span class="switch-label">领罐子</span
-              ><n-switch v-model:value="currentTemplate.claimBottle" />
-            </div>
-            <div class="switch-row">
-              <span class="switch-label">领挂机</span
-              ><n-switch v-model:value="currentTemplate.claimHangUp" />
-            </div>
-            <div class="switch-row">
-              <span class="switch-label">竞技场</span
-              ><n-switch v-model:value="currentTemplate.arenaEnable" />
-            </div>
-            <div class="switch-row">
-              <span class="switch-label">开宝箱</span
-              ><n-switch v-model:value="currentTemplate.openBox" />
-            </div>
-            <div class="switch-row">
-              <span class="switch-label">领取邮件奖励</span
-              ><n-switch v-model:value="currentTemplate.claimEmail" />
-            </div>
-            <div class="switch-row">
-              <span class="switch-label">黑市购买物品</span
-              ><n-switch v-model:value="currentTemplate.blackMarketPurchase" />
-            </div>
-            <div class="switch-row">
-              <span class="switch-label">付费招募</span
-              ><n-switch v-model:value="currentTemplate.payRecruit" />
-            </div>
-          </div>
-        </div>
-        <div class="modal-actions" style="margin-top: 20px; text-align: right">
-          <n-button
-            @click="showTaskTemplateModal = false"
-            style="margin-right: 12px"
-            >取消</n-button
-          >
-          <n-button @click="saveTaskTemplate" type="primary">保存模板</n-button>
-        </div>
-      </div>
-    </n-modal>
+      :current-template="currentTemplate"
+      v-model:template-name="currentTemplateName"
+      :is-editing="!!currentTemplateId"
+      @save="saveTaskTemplate"
+    />
 
     <!-- Apply Template Modal -->
-    <n-modal
+    <ApplyTemplateModal
       v-model:show="showApplyTemplateModal"
-      preset="card"
-      title="应用任务模板"
-      style="width: 90%; max-width: 600px"
-    >
-      <div class="settings-content">
-        <div class="settings-grid">
-          <div class="setting-item">
-            <label class="setting-label">选择模板</label>
-            <n-select
-              v-model:value="selectedTemplateId"
-              :options="taskTemplates"
-              label-field="name"
-              value-field="id"
-              placeholder="请选择要应用的模板"
-              size="small"
-              style="width: 100%"
-            />
-          </div>
-          <div class="setting-item">
-            <label class="setting-label">选择账号</label>
-
-            <!-- 分组快速选择 -->
-            <div
-              style="
-                margin-bottom: 12px;
-                border-bottom: 1px solid #eee;
-                padding-bottom: 8px;
-              "
-            >
-              <div style="font-size: 12px; color: #86909c; margin-bottom: 8px">
-                快速选择分组：
-              </div>
-              <div style="display: flex; gap: 6px; flex-wrap: wrap">
-                <n-button
-                  v-for="group in tokenGroups"
-                  :key="group.id"
-                  size="small"
-                  @click="
-                    () => {
-                      const groupTokenIds = getValidGroupTokenIds(group.id);
-                      groupTokenIds.forEach((id) => {
-                        if (!selectedTokensForApply.includes(id)) {
-                          selectedTokensForApply.push(id);
-                        }
-                      });
-                    }
-                  "
-                  :style="{
-                    borderColor: group.color,
-                    color: group.color,
-                  }"
-                  ghost
-                >
-                  {{ group.name }}
-                </n-button>
-                <div
-                  v-if="tokenGroups.length === 0"
-                  style="font-size: 12px; color: #ccc"
-                >
-                  暂无分组
-                </div>
-              </div>
-            </div>
-
-            <n-checkbox
-              :checked="isAllSelectedForApply"
-              :indeterminate="isIndeterminateForApply"
-              @update:checked="handleSelectAllForApply"
-            >
-              全选
-            </n-checkbox>
-            <n-checkbox-group
-              v-model:value="selectedTokensForApply"
-              style="margin-top: 8px"
-            >
-              <n-grid :cols="2" :x-gap="12" :y-gap="8">
-                <n-grid-item
-                  v-for="gameToken in sortedTokens"
-                  :key="gameToken.id"
-                >
-                  <n-checkbox :value="gameToken.id">{{
-                    gameToken.name
-                  }}</n-checkbox>
-                </n-grid-item>
-              </n-grid>
-            </n-checkbox-group>
-          </div>
-        </div>
-        <div class="modal-actions" style="margin-top: 20px; text-align: right">
-          <n-button @click="showApplyTemplateModal = false">取消</n-button>
-          <n-button
-            @click="applyTemplate"
-            type="success"
-            :disabled="
-              !selectedTemplateId || selectedTokensForApply.length === 0
-            "
-            >应用模板</n-button
-          >
-        </div>
-      </div>
-    </n-modal>
+      v-model:selected-template-id="selectedTemplateId"
+      v-model:selected-tokens-for-apply="selectedTokensForApply"
+      :task-templates="taskTemplates"
+      :sorted-tokens="sortedTokens"
+      :is-all-selected-for-apply="isAllSelectedForApply"
+      :is-indeterminate-for-apply="isIndeterminateForApply"
+      @select-all="handleSelectAllForApply"
+      @apply="applyTemplate"
+    />
 
     <!-- Template Manager Modal -->
-    <n-modal
+    <TemplateManageModal
       v-model:show="showTemplateManagerModal"
-      preset="card"
-      title="任务模板管理"
-      style="width: 90%; max-width: 800px"
-    >
-      <div class="settings-content">
-        <div
-          class="modal-header-actions"
-          style="
-            margin-bottom: 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          "
-        >
-          <div>
-            <n-button type="primary" @click="openNewTemplateModal"
-              >新增模板</n-button
-            >
-            <n-button
-              @click="openApplyTemplateModal"
-              type="success"
-              style="margin-left: 8px"
-              >应用模板</n-button
-            >
-            <n-button
-              @click="openAccountTemplateModal"
-              type="info"
-              style="margin-left: 8px"
-              >查看账号模板引用</n-button
-            >
-          </div>
-          <n-input placeholder="搜索模板" size="small" style="width: 200px" />
-        </div>
-
-        <!-- Template List -->
-        <div
-          class="template-list"
-          style="max-height: 400px; overflow-y: auto; margin-bottom: 16px"
-        >
-          <n-card
-            v-for="template in filteredTaskTemplates"
-            :key="template.id"
-            size="small"
-            style="margin-bottom: 12px"
-          >
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-              "
-            >
-              <div>
-                <h4 style="margin: 0; margin-bottom: 8px">
-                  {{ template.name }}
-                </h4>
-                <div style="font-size: 12px; color: #86909c">
-                  创建时间: {{ new Date(template.createdAt).toLocaleString() }}
-                  <span v-if="template.updatedAt"
-                    >, 更新时间:
-                    {{ new Date(template.updatedAt).toLocaleString() }}</span
-                  >
-                </div>
-              </div>
-              <div style="display: flex; gap: 8px">
-                <n-button size="small" @click="openEditTemplateModal(template)"
-                  >编辑</n-button
-                >
-                <n-button
-                  size="small"
-                  type="error"
-                  @click="deleteTaskTemplate(template.id)"
-                  >删除</n-button
-                >
-              </div>
-            </div>
-          </n-card>
-          <div
-            v-if="filteredTaskTemplates.length === 0"
-            style="text-align: center; padding: 24px; color: #86909c"
-          >
-            暂无模板
-          </div>
-        </div>
-
-        <!-- Actions -->
-        <div class="modal-actions" style="margin-top: 20px; text-align: right">
-          <n-button @click="showTemplateManagerModal = false">关闭</n-button>
-        </div>
-      </div>
-    </n-modal>
+      :filtered-task-templates="filteredTaskTemplates"
+      @delete="deleteTaskTemplate"
+      @open-references="openAccountTemplateModal"
+      @open-apply="openApplyTemplateModal"
+      @edit="openEditTemplateModal"
+      @create="openNewTemplateModal"
+    />
 
     <!-- Account Template References Modal -->
     <AccountTemplateRefModal
@@ -2199,6 +1871,10 @@ import ApplyLegionModal from "@/components/Batch/ApplyLegionModal.vue";
 import AccountTemplateRefModal from "@/components/Batch/AccountTemplateRefModal.vue";
 import DreamShopModal from "@/components/Batch/DreamShopModal.vue";
 import BlackMarketModal from "@/components/Batch/BlackMarketModal.vue";
+import TokenSettingsModal from "@/components/Batch/TokenSettingsModal.vue";
+import TemplateEditModal from "@/components/Batch/TemplateEditModal.vue";
+import ApplyTemplateModal from "@/components/Batch/ApplyTemplateModal.vue";
+import TemplateManageModal from "@/components/Batch/TemplateManageModal.vue";
 // Import batch task modules
 import {
   addTaskSaveLog,
