@@ -1,4 +1,10 @@
 import { computed, reactive, ref } from "vue";
+import {
+  addTaskSaveLog,
+  availableTasks,
+  calculateNextRuns,
+  validateCronExpression,
+} from "@/utils/batch";
 import { useMessage } from "naive-ui";
 
 /**
@@ -21,6 +27,7 @@ export function useScheduledTasks(deps) {
 
   // Scheduled Tasks State Management
   const scheduledTasks = ref([]); // List of all scheduled tasks
+  const taskScheduleSelectedGroupIds = ref([]); // 定时任务表单中通过分组按钮选中的分组ID
   const showTaskModal = ref(false); // Control the visibility of the add/edit task modal
   const showTasksModal = ref(false); // Control the visibility of the tasks list modal
   const editingTask = ref(null); // Currently editing task
@@ -481,7 +488,6 @@ export function useScheduledTasks(deps) {
     manualExecuteTask,
     loadScheduledTasks,
     saveScheduledTasks,
-    openNewTaskModal,
     editTask,
     parseCronExpression,
     saveTask,

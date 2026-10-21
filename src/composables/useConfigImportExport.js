@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import { useMessage } from "naive-ui";
 import { gameTokens } from "@/stores/tokenStore";
+import { normalizeBlackMarketPurchaseList } from "@/utils/batch/blackMarketConfig";
 import { uploadForRelayUrl } from "@/utils/fileRelay";
 import { toBase64Url } from "@/utils/encoding";
 
@@ -14,7 +15,14 @@ import { toBase64Url } from "@/utils/encoding";
  * @param {import("vue").ComputedRef<Array>} deps.tokens 账号列表
  */
 export function useConfigImportExport(deps) {
-  const { batchSettings, scheduledTasks, saveScheduledTasks, tokens } = deps;
+  const {
+    batchSettings,
+    scheduledTasks,
+    saveScheduledTasks,
+    saveBatchSettings,
+    createDefaultBlackMarketPurchaseList,
+    tokens,
+  } = deps;
   const message = useMessage();
 
   // 导出配置兜底:无法下载文件时展示文本供复制

@@ -3015,7 +3015,6 @@ const {
   manualExecuteTask,
   loadScheduledTasks,
   saveScheduledTasks,
-  openNewTaskModal,
   editTask,
   parseCronExpression,
   saveTask,
@@ -3072,6 +3071,8 @@ const {
   batchSettings,
   scheduledTasks,
   saveScheduledTasks,
+  saveBatchSettings,
+  createDefaultBlackMarketPurchaseList,
   tokens,
 });
 
