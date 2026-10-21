@@ -28,6 +28,7 @@ const SILENT_ERROR_CODES = new Set([
 const INFO_ERROR_CODES = new Set([
   3500020, // 没有可领取的奖励（通行证等）
   12000116, // 今日已领取免费奖励
+  1000020, // 今天已经领取过奖励了（每日礼包等）
   400000, // 物品不存在（无免费扭蛋次数）
   700010, // 任务未达成完成条件
   3300060, // 扫荡条件不满足
@@ -1052,6 +1053,13 @@ export class DailyTaskRunner {
           await this.sleep(this.delaySettings.taskDelay);
         } catch (error) {
           if (error.interrupted) throw error;
+          // "无事可做"类错误码（已领取/无奖励/条件未满足等）：记为跳过，
+          // 不算失败也不产生"待继续"，否则每轮结尾都会虚报"N 个步骤待继续"
+          const errorCode = extractErrorCode(error);
+          if (errorCode !== null && INFO_ERROR_CODES.has(errorCode)) {
+            summary.skipped++;
+            continue;
+          }
           summary.failed++;
           if (this.activeCondition === undefined) supplementalIncomplete++;
           // 失败日志已由 executeGameCommand 按错误码分级记录，这里不再重复打印
