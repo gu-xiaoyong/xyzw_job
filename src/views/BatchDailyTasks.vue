@@ -1297,54 +1297,13 @@
     </n-modal>
 
     <!-- Redeem Code Modal -->
-    <n-modal
+    <RedeemCodeModal
       v-model:show="showRedeemCodeModal"
-      preset="card"
-      title="一键使用兑换码"
-      style="width: 90%; max-width: 560px"
-    >
-      <div class="settings-content">
-        <n-alert type="info" show-icon style="margin-bottom: 12px">
-          每行填写一个兑换码，也支持用空格、逗号或分号分隔。执行时会先读取角色已兑换记录，已使用的兑换码会自动跳过。
-        </n-alert>
-        <div class="settings-grid">
-          <div class="setting-item">
-            <label class="setting-label">兑换码列表</label>
-            <n-input
-              v-model:value="batchSettings.cdkCodes"
-              type="textarea"
-              placeholder="例如：&#10;vip666&#10;VIP666&#10;happy666"
-              :autosize="{ minRows: 7, maxRows: 14 }"
-            />
-          </div>
-          <div class="setting-item">
-            <label class="setting-label">平台类型</label>
-            <n-input
-              v-model:value="batchSettings.cdkPlatformType"
-              placeholder="默认 h5"
-            />
-          </div>
-        </div>
-        <div class="modal-actions" style="margin-top: 20px; text-align: right">
-          <n-button
-            @click="showRedeemCodeModal = false"
-            style="margin-right: 12px"
-          >
-            取消
-          </n-button>
-          <n-button @click="saveRedeemCodeConfig" style="margin-right: 12px">
-            保存配置
-          </n-button>
-          <n-button
-            type="primary"
-            @click="executeRedeemCodes"
-            :disabled="!batchSettings.cdkCodes?.trim()"
-          >
-            开始兑换
-          </n-button>
-        </div>
-      </div>
-    </n-modal>
+      v-model:cdk-codes="batchSettings.cdkCodes"
+      v-model:cdk-platform-type="batchSettings.cdkPlatformType"
+      @save="saveRedeemCodeConfig"
+      @execute="executeRedeemCodes"
+    />
 
     <!-- Dream Buy Modal -->
     <n-modal
@@ -2368,38 +2327,14 @@
     </n-modal>
 
     <!-- Export text fallback modal: APK/手机 WebView 无法直接保存 blob 下载文件 -->
-    <n-modal
+    <ExportConfigModal
       v-model:show="showExportTextModal"
-      preset="card"
-      title="导出配置内容"
-      style="width: 92%; max-width: 600px"
-    >
-      <n-space vertical>
-        <template v-if="exportRelayUrl">
-          <div style="font-size: 13px; color: #666">
-            手机上无法直接下载?复制下方链接,用系统浏览器(如 Chrome)打开即可下载
-            .json 文件:
-          </div>
-          <n-input :value="exportRelayUrl" type="textarea" readonly :rows="3" />
-          <n-space>
-            <n-button type="primary" @click="copyExportLink">
-              复制链接
-            </n-button>
-            <n-button @click="openExportLink"> 尝试下载 </n-button>
-          </n-space>
-          <n-divider style="margin: 4px 0">
-            <span style="font-size: 12px; color: #999">或复制文本内容</span>
-          </n-divider>
-        </template>
-        <div style="font-size: 13px; color: #666">
-          也可复制以下内容,自行粘贴保存为 .json 文件,之后可通过"导入配置"恢复。
-        </div>
-        <n-input :value="exportJsonText" type="textarea" readonly :rows="10" />
-        <n-button type="primary" @click="copyExportText">
-          复制全部内容
-        </n-button>
-      </n-space>
-    </n-modal>
+      :relay-url="exportRelayUrl"
+      :json-text="exportJsonText"
+      @copy-link="copyExportLink"
+      @open-link="openExportLink"
+      @copy-text="copyExportText"
+    />
 
     <!-- War Guess Modal -->
     <n-modal
@@ -2615,6 +2550,8 @@ import { $emit } from "@/stores/events/index.ts";
 import { gameTokens, tokenGroups, useTokenStore } from "@/stores/tokenStore";
 import GroupManageModal from "@/components/Batch/GroupManageModal.vue";
 import LegacyGiftModal from "@/components/Batch/LegacyGiftModal.vue";
+import RedeemCodeModal from "@/components/Batch/RedeemCodeModal.vue";
+import ExportConfigModal from "@/components/Batch/ExportConfigModal.vue";
 // Import batch task modules
 import {
   addTaskSaveLog,
