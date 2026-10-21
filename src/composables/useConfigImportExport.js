@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { useMessage } from "naive-ui";
+import { gameTokens } from "@/stores/tokenStore";
 import { uploadForRelayUrl } from "@/utils/fileRelay";
 import { toBase64Url } from "@/utils/encoding";
 

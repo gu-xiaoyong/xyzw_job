@@ -1144,6 +1144,7 @@ const {
   taskTemplates,
   selectedTemplateId,
   selectedTokensForApply,
+  currentTemplateId,
   currentTemplateName,
   currentTemplate,
   filteredAccountTemplates,
@@ -1914,9 +1915,6 @@ const cloudTestAllTokens = async () => {
 // Scheduled Tasks Scheduler
 // ======================
 
-// Initialize scheduled tasks from localStorage
-loadScheduledTasks();
-
 // 修复TimePicker的"Invalid time value"错误：确保runTime的初始值不是null
 watch(
   () => showTaskModal.value,
@@ -2418,62 +2416,6 @@ const executeScheduledTask = async (task) => {
     );
   }
 };
-
-// =====================
-// 定时任务管理（composable）
-// =====================
-const {
-  scheduledTasks,
-  showTaskModal,
-  showTasksModal,
-  taskForm,
-  editingTask,
-  executingTaskIds,
-  cronValidation,
-  cronNextRuns,
-  taskGroupDefinitions,
-  groupedAvailableTasks,
-  taskScheduleSelectedGroupIds,
-  manualExecuteTask,
-  loadScheduledTasks,
-  saveScheduledTasks,
-  openNewTaskModal,
-  editTask,
-  parseCronExpression,
-  saveTask,
-  deleteTask,
-  toggleTaskEnabled,
-  resetRunType,
-  selectAllTokens,
-  deselectAllTokens,
-  selectAllTasks,
-  deselectAllTasks,
-} = useScheduledTasks({
-  executeScheduledTask,
-  tokens,
-  isRunning,
-  shouldStop,
-  addLog,
-});
-
-// =====================
-// 配置导入/导出（composable）
-// =====================
-const {
-  showExportTextModal,
-  exportJsonText,
-  exportRelayUrl,
-  exportConfig,
-  copyExportText,
-  copyExportLink,
-  openExportLink,
-  importConfig,
-} = useConfigImportExport({
-  batchSettings,
-  scheduledTasks,
-  saveScheduledTasks,
-  tokens,
-});
 
 // 注: boxTypeOptions, fishTypeOptions 已从 @/utils/batch 导入
 
@@ -3054,6 +2996,87 @@ const addLog = (log) => {
     }
   });
 };
+
+// =====================
+// 定时任务管理（composable）
+// =====================
+const {
+  scheduledTasks,
+  showTaskModal,
+  showTasksModal,
+  taskForm,
+  editingTask,
+  executingTaskIds,
+  cronValidation,
+  cronNextRuns,
+  taskGroupDefinitions,
+  groupedAvailableTasks,
+  taskScheduleSelectedGroupIds,
+  manualExecuteTask,
+  loadScheduledTasks,
+  saveScheduledTasks,
+  openNewTaskModal,
+  editTask,
+  parseCronExpression,
+  saveTask,
+  deleteTask,
+  toggleTaskEnabled,
+  resetRunType,
+  selectAllTokens,
+  deselectAllTokens,
+  selectAllTasks,
+  deselectAllTasks,
+} = useScheduledTasks({
+  executeScheduledTask,
+  tokens,
+  isRunning,
+  shouldStop,
+  addLog,
+});
+
+const openTaskModal = () => {
+  editingTask.value = null;
+  Object.assign(taskForm, {
+    name: "",
+    runType: "daily",
+    runTime: undefined,
+    cronExpression: "",
+    selectedTokens: [],
+    selectedTasks: [],
+    legionApplyTargetId: null,
+    enabled: true,
+  });
+  taskScheduleSelectedGroupIds.value = [];
+  showTaskModal.value = true;
+};
+
+const openTemplateManagerModal = () => {
+  // 加载模板列表
+  loadTaskTemplates();
+  showTemplateManagerModal.value = true;
+};
+
+// =====================
+// 配置导入/导出（composable）
+// =====================
+const {
+  showExportTextModal,
+  exportJsonText,
+  exportRelayUrl,
+  exportConfig,
+  copyExportText,
+  copyExportLink,
+  openExportLink,
+  importConfig,
+} = useConfigImportExport({
+  batchSettings,
+  scheduledTasks,
+  saveScheduledTasks,
+  tokens,
+});
+
+// Initialize scheduled tasks from localStorage
+loadScheduledTasks();
 
 watch(autoScrollLog, (newValue) => {
   if (newValue && logContainer.value) {
