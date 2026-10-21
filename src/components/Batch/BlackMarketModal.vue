@@ -27,13 +27,7 @@
       <div
         v-for="(item, index) in list"
         :key="`${index}-${item.itemId ?? 'new'}`"
-        style="
-          display: grid;
-          grid-template-columns: 220px 120px 120px 1fr 96px;
-          gap: 12px;
-          align-items: center;
-          margin-bottom: 12px;
-        "
+        class="purchase-row"
       >
         <n-select
           :value="item.itemId"
@@ -80,3 +74,33 @@ defineEmits(["add", "remove", "reset", "save", "apply-catalog"]);
 const show = defineModel("show", { type: Boolean, default: false });
 const list = defineModel("list", { type: Array, default: () => [] });
 </script>
+
+<style scoped lang="scss">
+.purchase-row {
+  display: grid;
+  grid-template-columns: 220px 120px 120px minmax(0, 1fr) 96px;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+/* 窄屏（手机）下堆叠布局，避免固定列宽把弹窗撑出屏幕 */
+@media (max-width: 640px) {
+  .purchase-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+
+    > :first-child {
+      grid-column: 1 / -1; /* 常用物品下拉占整行 */
+    }
+
+    > :nth-child(4) {
+      grid-column: 1 / -1; /* 备注占整行 */
+    }
+
+    > :nth-child(5) {
+      justify-self: end; /* 删除按钮靠右 */
+    }
+  }
+}
+</style>
