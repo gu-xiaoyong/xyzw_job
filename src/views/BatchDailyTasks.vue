@@ -1133,87 +1133,13 @@
     </n-modal>
 
     <!-- Account Template References Modal -->
-    <n-modal
+    <AccountTemplateRefModal
       v-model:show="showAccountTemplateModal"
-      preset="card"
-      title="账号模板引用查看"
-      style="width: 90%; max-width: 800px"
-    >
-      <div class="settings-content">
-        <div
-          class="modal-header-actions"
-          style="
-            margin-bottom: 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          "
-        >
-          <div>
-            <span>共 {{ filteredAccountTemplates.length }} 个账号</span>
-          </div>
-          <div style="display: flex; gap: 8px; align-items: center">
-            <label style="font-size: 12px; color: #86909c">按模板筛选:</label>
-            <n-select
-              v-model:value="selectedTemplateForFilter"
-              :options="taskTemplates"
-              label-field="name"
-              value-field="id"
-              placeholder="全部模板"
-              size="small"
-              @update:value="filterAccountTemplates"
-              style="width: 180px"
-            />
-          </div>
-        </div>
-
-        <!-- Account Template List -->
-        <div
-          class="account-template-list"
-          style="max-height: 400px; overflow-y: auto; margin-bottom: 16px"
-        >
-          <n-card
-            v-for="item in filteredAccountTemplates"
-            :key="item.tokenId"
-            size="small"
-            style="margin-bottom: 12px"
-          >
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-              "
-            >
-              <div>
-                <h4 style="margin: 0; margin-bottom: 4px">
-                  {{ item.tokenName }}
-                </h4>
-              </div>
-              <div>
-                <n-tag
-                  :type="item.templateId ? 'success' : 'default'"
-                  size="small"
-                >
-                  {{ item.templateName }}
-                </n-tag>
-              </div>
-            </div>
-          </n-card>
-          <div
-            v-if="filteredAccountTemplates.length === 0"
-            style="text-align: center; padding: 24px; color: #86909c"
-          >
-            暂无账号数据
-          </div>
-        </div>
-
-        <!-- Actions -->
-        <div class="modal-actions" style="margin-top: 20px; text-align: right">
-          <n-button @click="showAccountTemplateModal = false">关闭</n-button>
-        </div>
-      </div>
-    </n-modal>
+      v-model:selected-template-for-filter="selectedTemplateForFilter"
+      :filtered-account-templates="filteredAccountTemplates"
+      :task-templates="taskTemplates"
+      @filter="filterAccountTemplates"
+    />
 
     <!-- Legacy Gift Modal -->
     <LegacyGiftModal
@@ -1306,151 +1232,27 @@
     />
 
     <!-- Dream Buy Modal -->
-    <n-modal
+    <DreamShopModal
       v-model:show="showDreamBuyModal"
-      preset="card"
-      title="梦境商品购买配置"
-      style="width: 90%; max-width: 600px"
-    >
-      <div class="settings-content">
-        <div class="settings-grid">
-          <n-alert type="info" show-icon style="margin-bottom: 12px">
-            请勾选需要购买的商品。只会购买列表中存在的商品。
-          </n-alert>
-
-          <div style="display: flex; gap: 12px; margin-bottom: 12px">
-            <n-button size="small" type="warning" @click="selectGoldItems">
-              一键勾选金币商品
-            </n-button>
-            <n-button size="small" @click="selectAllItems"> 全选所有 </n-button>
-            <n-button size="small" @click="clearAllItems"> 清空选择 </n-button>
-          </div>
-
-          <div
-            v-for="(merchant, id) in merchantConfig"
-            :key="id"
-            style="margin-bottom: 16px"
-          >
-            <div style="font-weight: bold; margin-bottom: 8px">
-              {{ merchant.name }}
-            </div>
-            <n-grid :cols="3" :x-gap="12" :y-gap="8">
-              <n-grid-item
-                v-for="(item, itemIndex) in merchant.items"
-                :key="itemIndex"
-              >
-                <n-checkbox
-                  :value="`${id}-${itemIndex}`"
-                  :checked="dreamBuyList.includes(`${id}-${itemIndex}`)"
-                  @update:checked="
-                    (checked) => toggleDreamItem(`${id}-${itemIndex}`, checked)
-                  "
-                >
-                  {{ item }}
-                </n-checkbox>
-              </n-grid-item>
-            </n-grid>
-          </div>
-        </div>
-        <div class="modal-actions" style="margin-top: 20px; text-align: right">
-          <n-button
-            @click="showDreamBuyModal = false"
-            style="margin-right: 12px"
-            >取消</n-button
-          >
-          <n-button type="primary" @click="saveDreamBuyConfig"
-            >保存配置</n-button
-          >
-        </div>
-      </div>
-    </n-modal>
+      v-model:selected-keys="dreamBuyList"
+      @toggle="toggleDreamItem"
+      @select-gold="selectGoldItems"
+      @select-all="selectAllItems"
+      @clear="clearAllItems"
+      @save="saveDreamBuyConfig"
+    />
 
     <!-- Black Market Purchase Modal -->
-    <n-modal
+    <BlackMarketModal
       v-model:show="showBlackMarketPurchaseModal"
-      preset="card"
-      title="黑市采购清单配置"
-      style="width: 90%; max-width: 760px"
-    >
-      <div class="settings-content">
-        <n-alert type="info" show-icon style="margin-bottom: 12px">
-          这里保存的是要下发到游戏服务器的黑市采购清单。每条填写 `itemId`
-          和折扣，折扣范围
-          1-10；保存后需手动执行“一键配置黑市清单”才会真正写入服务器。
-        </n-alert>
-
-        <div style="display: flex; gap: 12px; margin-bottom: 12px">
-          <n-button
-            size="small"
-            type="primary"
-            @click="addBlackMarketPurchaseItem"
-          >
-            新增条目
-          </n-button>
-          <n-button size="small" @click="resetBlackMarketPurchaseList">
-            恢复默认
-          </n-button>
-        </div>
-
-        <n-alert type="warning" show-icon style="margin-bottom: 12px">
-          优先从下拉框选择常用物品，系统会自动填入
-          `itemId`、备注和推荐折扣；如果下拉里没有，再手动填写 `itemId`。
-        </n-alert>
-
-        <div
-          v-for="(item, index) in blackMarketPurchaseList"
-          :key="`${index}-${item.itemId ?? 'new'}`"
-          style="
-            display: grid;
-            grid-template-columns: 220px 120px 120px 1fr 96px;
-            gap: 12px;
-            align-items: center;
-            margin-bottom: 12px;
-          "
-        >
-          <n-select
-            :value="item.itemId"
-            :options="blackMarketItemOptions"
-            placeholder="选择常用物品"
-            clearable
-            filterable
-            @update:value="(value) => applyBlackMarketCatalogItem(index, value)"
-          />
-          <n-input-number
-            v-model:value="item.itemId"
-            placeholder="itemId"
-            :min="1"
-            :show-button="false"
-          />
-          <n-input-number
-            v-model:value="item.discount"
-            placeholder="折扣"
-            :min="1"
-            :max="10"
-          />
-          <n-input v-model:value="item.note" placeholder="备注（可选）" />
-          <n-button
-            type="error"
-            secondary
-            @click="removeBlackMarketPurchaseItem(index)"
-          >
-            删除
-          </n-button>
-        </div>
-
-        <div class="modal-actions" style="margin-top: 20px; text-align: right">
-          <n-button
-            @click="showBlackMarketPurchaseModal = false"
-            style="margin-right: 12px"
-          >
-            取消
-          </n-button>
-          <n-button type="primary" @click="saveBlackMarketPurchaseConfig">
-            保存配置
-          </n-button>
-        </div>
-      </div>
-    </n-modal>
+      v-model:list="blackMarketPurchaseList"
+      :item-options="blackMarketItemOptions"
+      @add="addBlackMarketPurchaseItem"
+      @remove="removeBlackMarketPurchaseItem"
+      @reset="resetBlackMarketPurchaseList"
+      @save="saveBlackMarketPurchaseConfig"
+      @apply-catalog="applyBlackMarketCatalogItem"
+    />
 
     <!-- Tasks List Modal -->
     <n-modal
@@ -2337,190 +2139,30 @@
     />
 
     <!-- War Guess Modal -->
-    <n-modal
+    <WarGuessModal
       v-model:show="showWarGuessModal"
-      preset="card"
-      title="月赛助威"
-      style="width: 90%; max-width: 800px"
-    >
-      <div class="settings-content">
-        <div class="settings-grid" style="display: block">
-          <div
-            style="
-              margin-bottom: 16px;
-              display: flex;
-              align-items: center;
-              gap: 12px;
-            "
-          >
-            <span style="font-size: 16px">拍手器:</span>
-            <n-input-number
-              v-model:value="warGuessCoin"
-              placeholder="拍手器"
-              :min="1"
-              :max="20"
-              style="width: 120px"
-            >
-            </n-input-number>
-            <n-button
-              type="primary"
-              @click="handleWarGuessCheer"
-              :disabled="!selectedWarGuessLegionId || isRunning"
-            >
-              助威
-            </n-button>
-            <n-button @click="fetchWarGuessRank" :loading="warGuessLoading">
-              刷新数据
-            </n-button>
-          </div>
-
-          <n-data-table
-            :columns="warGuessColumns"
-            :data="warGuessList"
-            :loading="warGuessLoading"
-            :row-key="(row) => row.id"
-            :checked-row-keys="
-              selectedWarGuessLegionId ? [selectedWarGuessLegionId] : []
-            "
-            @update:checked-row-keys="
-              (keys) => (selectedWarGuessLegionId = keys[0])
-            "
-            :row-props="warGuessRowProps"
-            style="height: 400px; flex: 1"
-            flex-height
-          />
-        </div>
-        <div class="modal-actions" style="margin-top: 20px; text-align: right">
-          <n-button @click="showWarGuessModal = false">关闭</n-button>
-        </div>
-      </div>
-    </n-modal>
+      v-model:coin="warGuessCoin"
+      :war-guess-list="warGuessList"
+      :war-guess-loading="warGuessLoading"
+      :war-guess-columns="warGuessColumns"
+      :war-guess-row-props="warGuessRowProps"
+      v-model:selected-war-guess-legion-id="selectedWarGuessLegionId"
+      :is-running="isRunning"
+      @cheer="handleWarGuessCheer"
+      @fetch="fetchWarGuessRank"
+    />
 
     <!-- Batch Apply Legion Modal -->
-    <n-modal
+    <ApplyLegionModal
       v-model:show="showApplyLegionModal"
-      preset="card"
-      title="批量申请俱乐部"
-      style="width: 90%; max-width: 720px"
-    >
-      <div class="settings-content">
-        <div class="settings-grid" style="display: block">
-          <div
-            style="
-              margin-bottom: 16px;
-              display: flex;
-              align-items: center;
-              gap: 12px;
-              flex-wrap: wrap;
-            "
-          >
-            <span style="font-size: 16px">俱乐部ID:</span>
-            <n-input-number
-              v-model:value="applyLegionTargetId"
-              placeholder="请输入俱乐部ID"
-              :min="1"
-              clearable
-              style="width: 180px"
-            />
-            <n-button
-              @click="fetchApplyLegionTargetInfo"
-              :loading="applyLegionLoading"
-            >
-              查询俱乐部
-            </n-button>
-            <n-button
-              type="primary"
-              @click="handleBatchApplyLegion"
-              :disabled="!applyLegionPreview?.id || isRunning"
-            >
-              发起申请
-            </n-button>
-          </div>
-
-          <div
-            style="
-              margin-bottom: 12px;
-              padding: 12px;
-              border-radius: 8px;
-              background: #f8f9fa;
-              border: 1px solid #e9ecef;
-              color: #666;
-            "
-          >
-            仅会对当前未加入俱乐部的账号发申请，已加入任意俱乐部的账号会自动跳过。
-          </div>
-
-          <n-alert
-            v-if="applyLegionError"
-            type="error"
-            :show-icon="true"
-            style="margin-bottom: 16px"
-          >
-            {{ applyLegionError }}
-          </n-alert>
-
-          <div
-            v-if="applyLegionPreview"
-            style="
-              display: flex;
-              gap: 16px;
-              align-items: flex-start;
-              padding: 16px;
-              border: 1px solid #e5e7eb;
-              border-radius: 10px;
-              background: white;
-            "
-          >
-            <img
-              :src="applyLegionPreview.logo || ''"
-              alt="俱乐部头像"
-              style="
-                width: 64px;
-                height: 64px;
-                border-radius: 50%;
-                object-fit: cover;
-                background: #f3f4f6;
-                border: 1px solid #e5e7eb;
-              "
-            />
-            <div style="flex: 1; min-width: 0">
-              <div
-                style="
-                  display: flex;
-                  justify-content: space-between;
-                  gap: 12px;
-                  flex-wrap: wrap;
-                  margin-bottom: 8px;
-                "
-              >
-                <div style="font-size: 18px; font-weight: 600">
-                  {{ applyLegionPreview.name }}
-                </div>
-                <n-tag type="info">ID: {{ applyLegionPreview.id }}</n-tag>
-              </div>
-              <div
-                style="display: flex; gap: 16px; flex-wrap: wrap; color: #666"
-              >
-                <span>等级: {{ applyLegionPreview.level || 0 }}</span>
-                <span>成员数: {{ applyLegionPreview.memberCount || 0 }}</span>
-                <span v-if="applyLegionPreview.chairmanName">
-                  会长: {{ applyLegionPreview.chairmanName }}
-                </span>
-              </div>
-              <div
-                v-if="applyLegionPreview.notice"
-                style="margin-top: 10px; color: #666; line-height: 1.5"
-              >
-                公告: {{ applyLegionPreview.notice }}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="modal-actions" style="margin-top: 20px; text-align: right">
-          <n-button @click="showApplyLegionModal = false">关闭</n-button>
-        </div>
-      </div>
-    </n-modal>
+      v-model:target-id="applyLegionTargetId"
+      :apply-legion-preview="applyLegionPreview"
+      :apply-legion-loading="applyLegionLoading"
+      :apply-legion-error="applyLegionError"
+      :is-running="isRunning"
+      @fetch="fetchApplyLegionTargetInfo"
+      @apply="handleBatchApplyLegion"
+    />
 
     <!-- Token Group Management Modal -->
     <GroupManageModal
@@ -2552,6 +2194,11 @@ import GroupManageModal from "@/components/Batch/GroupManageModal.vue";
 import LegacyGiftModal from "@/components/Batch/LegacyGiftModal.vue";
 import RedeemCodeModal from "@/components/Batch/RedeemCodeModal.vue";
 import ExportConfigModal from "@/components/Batch/ExportConfigModal.vue";
+import WarGuessModal from "@/components/Batch/WarGuessModal.vue";
+import ApplyLegionModal from "@/components/Batch/ApplyLegionModal.vue";
+import AccountTemplateRefModal from "@/components/Batch/AccountTemplateRefModal.vue";
+import DreamShopModal from "@/components/Batch/DreamShopModal.vue";
+import BlackMarketModal from "@/components/Batch/BlackMarketModal.vue";
 // Import batch task modules
 import {
   addTaskSaveLog,
