@@ -757,6 +757,7 @@ export class DailyTaskRunner {
     const CARD_LABELS = {
       1: "领取免费礼包",
       4001: "领取周卡礼包",
+      4002: "领取月卡礼包",
       4003: "领取永久卡礼包",
     };
     const cardTimeEntries = Object.entries(roleData.cardTime ?? {}).filter(
