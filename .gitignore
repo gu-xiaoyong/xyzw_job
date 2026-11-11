@@ -140,3 +140,9 @@ dist
 .env
 .edgeone/*
 .tef_dist/*
+
+# 本地参考资料与安装包（勿提交）
+_xyzwsearch/
+*.apk
+.zcodeignore
+package-lock.json
