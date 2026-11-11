@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { prepareBinToken, saveBinToken } from "../src/utils/binTokenImport.js";
 import {
   getAuthUserData,
@@ -202,12 +202,16 @@ async function createStore() {
     {
       "@vueuse/core": { useLocalStorage: (_key, value) => ref(value) },
       pinia: { defineStore: (_name, setup) => setup },
-      vue: { computed, ref },
+      vue: { computed, ref, watch },
       "@/hooks/useIndexedDB": {
         default: () => ({ getArrayBuffer: async () => null }),
       },
       "@/router": { default: { currentRoute: ref({ path: "/tokens" }) } },
       "@/utils/bonProtocol": { g_utils: {} },
+      "@/utils/gameReservations": {
+        gameReservations: {},
+        isGameTokenRunning: () => false,
+      },
       "@/utils/logger": {
         gameLogger: logger,
         tokenLogger: logger,
