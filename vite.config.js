@@ -193,6 +193,11 @@ export default defineConfig(async () => {
       open: true,
       host: true,
       proxy: {
+        // 前端埋点日志：转发到本地 render-backend（默认 3001），由后端写入 logs/
+        "/frontend-log": {
+          target: "http://127.0.0.1:3001",
+          changeOrigin: true,
+        },
         // 手机号验证码接口：ucenter 网关按 Host 路由，直连 ucenter 域名；
         // 去掉代理前缀后剩余的 /ucenter-app-server/... 即上游真实路径。
         // （Cloudflare Workers 的 fetch 无法伪造 Host，不能借道 comb-platform）

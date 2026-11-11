@@ -127,6 +127,7 @@ declare module 'vue' {
     ScheduledTaskListModal: typeof import('./src/components/Batch/ScheduledTaskListModal.vue')['default']
     ServerRankListPageCard: typeof import('./src/components/cards/ServerRankListPageCard.vue')['default']
     ServerRoleList: typeof import('./src/components/ServerRoleList.vue')['default']
+    ShopGoodsCard: typeof import('./src/components/cards/ShopGoodsCard.vue')['default']
     Signin: typeof import('./src/components/Club/Signin.vue')['default']
     SkinChallengeCard: typeof import('./src/components/cards/SkinChallengeCard.vue')['default']
     StarUpgradeCard: typeof import('./src/components/cards/StarUpgradeCard.vue')['default']
