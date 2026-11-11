@@ -350,6 +350,7 @@ test("assistant transport cannot open or reconnect while an online game owns the
     new URL("../src/utils/xyzwWebSocket.js", import.meta.url),
     {
       "@/stores/cache": { $CacheManager: { getCache: () => ({}) } },
+      "./bgTicker.js": { onBgTick: () => () => {} },
       "./bonProtocol.js": { g_utils: {} },
       "./helperTaskRunner.js": { sleep: async () => {} },
       "./logger.js": { gameLogger: logger, wsLogger: logger },
