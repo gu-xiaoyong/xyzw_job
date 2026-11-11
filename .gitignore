@@ -153,3 +153,6 @@ render-backend/logs/
 
 # Windows 保留名文件（bash 里误写 >nul 重定向会生成）
 nul
+
+# Docker 部署环境变量（含密钥，勿入库）
+.env.docker

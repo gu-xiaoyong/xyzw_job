@@ -773,6 +773,7 @@ import {
   LINEUP_RULES,
 } from "@/utils/HeroList";
 import { downloadCanvasAsImage } from "@/utils/imageExport";
+import { formatPower } from "@/utils/legionWar";
 
 defineProps({
   visible: {
@@ -2150,17 +2151,6 @@ const getActiveAllianceCount = (alliance) =>
   allianceCounts.value[alliance] ?? 0;
 
 // 格式化战�?
-const formatPower = (power) => {
-  if (!power) return "0";
-  if (power >= 100000000) {
-    return `${(power / 100000000).toFixed(2)}亿`;
-  }
-  if (power >= 10000) {
-    return `${(power / 10000).toFixed(2)}万`;
-  }
-  return power.toString();
-};
-
 // 处理图片加载错误
 
 const disabledDate = (current) => {
