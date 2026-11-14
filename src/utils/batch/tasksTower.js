@@ -43,8 +43,11 @@ async function getTowerInfo(tokenStore, tokenId, onLog) {
             5000,
           ),
         {
-          onLimited: () =>
-            onLog?.(`怪异塔请求被限频(400340)，自适应退避后重试`, "warning"),
+          onLimited: (wait) =>
+            onLog?.(
+              `怪异塔请求被限频(400340)，${(wait / 1000).toFixed(1)}s 后自适应重试`,
+              "warning",
+            ),
         },
       );
     } catch (e) {
@@ -519,6 +522,7 @@ export function createTasksTower(deps) {
         });
 
         // 爬塔前先补领未领取的章节奖励，否则 evotower_readyfight 会被拒绝（12200020）
+        // 复用刚读取的 evotowerinfo1，省一次串行排队的 getinfo（多账号时每次约省 0.6-6s）
         await claimPendingEvoTowerRewards(
           tokenStore,
           tokenId,
@@ -528,6 +532,7 @@ export function createTasksTower(deps) {
               message: `${token.name} ${message}`,
               type,
             }),
+          evotowerinfo1,
         );
 
         let count = 0;

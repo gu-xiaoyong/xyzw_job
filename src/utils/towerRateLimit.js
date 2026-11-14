@@ -32,8 +32,8 @@ const MIN_CMD_GAP = { info: 250, claim: 300 };
 /** 间隔估计值下限（ms）：低于此值基本必被打回 */
 const EST_FLOOR = { info: 350, claim: 400 };
 
-/** 间隔估计值上限（ms）：超过 10s 多为异常/全局限流，不再无脑拉长 */
-const EST_CEIL = 10000;
+/** 间隔估计值上限（ms）：超过 5s 的 info 冷却多半是风暴残留高估，不再无脑拉长 */
+const EST_CEIL = 5000;
 
 /** 间隔估计初始值（ms） */
 const EST_DEFAULT = { info: 450, claim: 500 };
@@ -44,17 +44,19 @@ const EST_MARGIN = 150;
 /** 400340 后的乘性放大系数 */
 const EST_GROW = 1.5;
 
-/** 连续成功后每次下调的步长（ms） */
+/** 连续成功后每次下调的最小步长（ms）；实际步长为 max(此值, 估计值×15%) */
 const EST_SHRINK = 100;
 
 /** 连续成功多少次才下调一次（避免在边界上反复抖动） */
-const OK_BEFORE_SHRINK = 5;
+const OK_BEFORE_SHRINK = 3;
 
 /** 单条命令 400340 后的最大自动重试次数 */
 const MAX_RETRY = 3;
 
-/** 估计值持久化键（跨会话沿用学习结果） */
-const STORE_KEY = "tower:estCooldown:v1";
+/** 估计值持久化键（跨会话沿用学习结果）。
+ * v2：v1 的学习值曾被 400340 风暴抬到 ~6s，而旧算法固定 100ms 步长恢复需数百次成功，
+ * 批量任务每轮只产出十几次查询根本缓不过来；换键丢弃历史高估值，从初始值重新收敛。 */
+const STORE_KEY = "tower:estCooldown:v2";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -116,11 +118,16 @@ const scheduleNext = (sk, key) => {
   nextAllowedAt[sk] = Date.now() + est[key] + EST_MARGIN;
 };
 
-/** 发送成功：连续成功达阈值则下调估计值，向服务器真实冷却收敛 */
+/** 发送成功：连续成功达阈值则下调估计值，向服务器真实冷却收敛。
+ * 高估时按 15% 比例回落（至少 EST_SHRINK）：固定小步长在 6-10s 风暴高估下
+ * 需要数百次成功才能恢复，批量任务的查询量远不够；比例衰减指数收敛，几十次即回正常。 */
 const onSuccess = (sk, key) => {
   okStreak[sk] = (okStreak[sk] ?? 0) + 1;
   if (okStreak[sk] >= OK_BEFORE_SHRINK) {
-    est[key] = clampEst(key, est[key] - EST_SHRINK);
+    est[key] = clampEst(
+      key,
+      est[key] - Math.max(EST_SHRINK, Math.round(est[key] * 0.15)),
+    );
     okStreak[sk] = 0;
     persistEst();
   }
