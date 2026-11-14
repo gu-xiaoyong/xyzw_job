@@ -12,6 +12,16 @@ import {
   TowerAction,
 } from "../towerRateLimit.js";
 
+/** 战斗后短暂停顿(ms)：非校准轮之间仅此间隔，服务端战斗结算本身耗时数秒 */
+const POST_FIGHT_DELAY = 150;
+
+/**
+ * 每多少场战斗做一次塔信息校准（查询真实层数/体力、领每日任务与章节奖励）。
+ * 其余场次按每场扣 1 体力本地累计（打输同样扣），不再每轮 getinfo——
+ * 服务端对 evotower_* 有频控(400340)，查询越少越稳，速度也越快。
+ */
+const INFO_INTERVAL = 5;
+
 /**
  * 读取怪异塔信息（跨账号限流排队 + 400340 自适应退避重试）。
  *
@@ -564,10 +574,28 @@ export function createTasksTower(deps) {
             consecutiveFailures = 0;
             consecutiveRateLimit = 0;
 
-            await new Promise((r) => setTimeout(r, 500));
+            // 每场战斗固定消耗1体力(打输同样扣),本地累计;层数/体力每 INFO_INTERVAL 场校准
+            currentEnergy -= 1;
+
+            await new Promise((r) => setTimeout(r, POST_FIGHT_DELAY));
+
+            // 校准轮:每 INFO_INTERVAL 场(或本地体力计到0、或达到次数上限)才查询一次,
+            // 顺带处理每日任务/章节奖励;其余场次跳过所有查询直接下一场
+            const needInfo =
+              count % INFO_INTERVAL === 0 ||
+              currentEnergy <= 0 ||
+              count >= MAX_CLIMB;
+            if (!needInfo) {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 第 ${count} 次战斗完成 (剩余体力 ${currentEnergy})`,
+                type: "info",
+              });
+              continue;
+            }
 
             // 战斗已结算;此处读塔信息若被限频(400340)等失败,不应计为战斗失败,
-            // 只跳过本轮每日任务/章节奖励领取,层数体力沿用旧值
+            // 只跳过本轮每日任务/章节奖励领取,层数体力沿用本地累计值
             // (限流排队与 400340 自适应重试在 getTowerInfo 内部完成)
             const evotowerinfo2 = await getTowerInfo(
               tokenStore,
@@ -582,7 +610,7 @@ export function createTasksTower(deps) {
             if (!evotowerinfo2) {
               addLog({
                 time: new Date().toLocaleTimeString(),
-                message: `${token.name} 第 ${count} 次战斗完成（塔信息刷新失败，本轮未确认层数/体力）`,
+                message: `${token.name} 第 ${count} 次战斗完成（塔信息刷新失败，层数/体力沿用本地累计）`,
                 type: "warning",
               });
               continue;
@@ -659,7 +687,7 @@ export function createTasksTower(deps) {
               type: "info",
             });
 
-            // 卡层提示:战斗执行了但层数没推进,大概率打不过。
+            // 卡层提示:校准轮发现层数没推进,大概率打不过。
             // 不中断:打输同样消耗体力,继续打到体力耗尽为止(体力归零后循环自然结束)
             if (nowFloor > lastFloor) {
               lastFloor = nowFloor;
