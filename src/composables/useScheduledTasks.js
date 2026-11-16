@@ -97,6 +97,7 @@ export function useScheduledTasks(deps) {
         "climbWeirdTower",
         "batchUseItems",
         "batchMergeItems",
+        "batchUseAndMergeItems",
         "batchClaimFreeEnergy",
       ],
     },
