@@ -537,12 +537,24 @@ export function createTasksStore(deps) {
         await sleep(delayConfig.action);
 
         if (result.error) {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${token.name} 黑市采购失败: ${result.error}`,
-            type: "error",
-          });
-          tokenStatus.value[tokenId] = "failed";
+          // result.error 与 catch 分支同语义：1300040=无货/条件不满足、200020=暂无可采购
+          if (
+            /1300040|200020|暂无可采购|无货/.test(String(result.error || ""))
+          ) {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 黑市暂无可采购商品`,
+              type: "info",
+            });
+            tokenStatus.value[tokenId] = "completed";
+          } else {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 黑市采购失败: ${result.error}`,
+              type: "error",
+            });
+            tokenStatus.value[tokenId] = "failed";
+          }
         } else {
           addLog({
             time: new Date().toLocaleTimeString(),
@@ -778,12 +790,22 @@ export function createTasksStore(deps) {
         await new Promise((r) => setTimeout(r, delayConfig.action));
 
         if (result.error) {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${token.name} 邮件领取失败: ${result.error}`,
-            type: "error",
-          });
-          tokenStatus.value[tokenId] = "failed";
+          // 与 catch 分支同语义：暂无可领取的附件属正常态
+          if (/200020|暂无可领取|没有附件|无附件/.test(String(result.error))) {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 暂无可领取的邮件附件，跳过`,
+              type: "info",
+            });
+            tokenStatus.value[tokenId] = "completed";
+          } else {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 邮件领取失败: ${result.error}`,
+              type: "error",
+            });
+            tokenStatus.value[tokenId] = "failed";
+          }
         } else {
           addLog({
             time: new Date().toLocaleTimeString(),

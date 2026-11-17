@@ -84,6 +84,15 @@ export function createTasksLegacy(deps) {
         });
         return true;
       }
+      if (errorCode === 200160) {
+        // 功法未解锁（小号等级<4001）属正常态，不算失败
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${tokenName} 功法未解锁（200160），跳过开启探索`,
+          type: "info",
+        });
+        return true;
+      }
       if (errorCode === 12400160) {
         // 探索暂不可开始(次数上限/暂态限制)，不算失败，等下轮定时任务重试
         addLog({

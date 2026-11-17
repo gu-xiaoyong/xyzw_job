@@ -640,8 +640,10 @@ export function createTasksItem(deps) {
                   });
                   await new Promise((r) => setTimeout(r, 1000));
                 } catch (e) {
-                  // 200020 = 服务器暂无可领取，属正常情况
-                  const nothingToClaim = (e.message || "").includes("200020");
+                  // 200020=暂无可领取 / 200160=未入军团或功能未解锁 等暂态均属正常
+                  const nothingToClaim =
+                    classifyBusinessError(e).level !== "error" ||
+                    (e.message || "").includes("200020");
                   addLog({
                     time: new Date().toLocaleTimeString(),
                     message: nothingToClaim
@@ -671,8 +673,10 @@ export function createTasksItem(deps) {
                   });
                   await new Promise((r) => setTimeout(r, 1000));
                 } catch (e) {
-                  // 200020 = 服务器暂无可领取，属正常情况
-                  const nothingToClaim = (e.message || "").includes("200020");
+                  // 200020=暂无可领取 / 200160=未入军团或功能未解锁 等暂态均属正常
+                  const nothingToClaim =
+                    classifyBusinessError(e).level !== "error" ||
+                    (e.message || "").includes("200020");
                   addLog({
                     time: new Date().toLocaleTimeString(),
                     message: nothingToClaim
@@ -685,7 +689,9 @@ export function createTasksItem(deps) {
             }
           } catch (err) {
             console.error("领取蟠桃园积分奖励异常:", err);
-            const nothingToClaim = (err.message || "").includes("200020");
+            const nothingToClaim =
+              classifyBusinessError(err).level !== "error" ||
+              (err.message || "").includes("200020");
             addLog({
               time: new Date().toLocaleTimeString(),
               message: nothingToClaim
@@ -719,7 +725,9 @@ export function createTasksItem(deps) {
       } catch (error) {
         console.error(error);
         // 200020 = 服务器暂无可领取，属正常情况
-        const nothingToClaim = (error.message || "").includes("200020");
+        const nothingToClaim =
+          classifyBusinessError(error).level !== "error" ||
+          (error.message || "").includes("200020");
         if (nothingToClaim) {
           tokenStatus.value[tokenId] = "completed";
           addLog({
@@ -889,6 +897,24 @@ export function createTasksItem(deps) {
               break; // 失败则停止
             }
           } catch (err) {
+            // 200400/400340=循环连发的限流暂态→warning; 3300060=扫荡条件不满足→info
+            const { code, level } = classifyBusinessError(err);
+            if (level === "info") {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 扫荡条件不满足（${code}），停止扫荡`,
+                type: "info",
+              });
+              break;
+            }
+            if (level === "warning") {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 扫荡被限流（${code}），本轮提前结束，可稍后重跑`,
+                type: "warning",
+              });
+              break;
+            }
             addLog({
               time: new Date().toLocaleTimeString(),
               message: `${token.name} 扫荡请求异常: ${err.message}`,

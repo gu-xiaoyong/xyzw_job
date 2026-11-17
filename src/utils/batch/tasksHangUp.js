@@ -617,21 +617,33 @@ export function createTasksHangUp(deps) {
         if (
           errorMessage.includes("已加入") ||
           errorMessage.includes("已经加入") ||
-          errorMessage.includes("当前已加入")
+          errorMessage.includes("当前已加入") ||
+          errorMessage.includes("已申请")
         ) {
           tokenStatus.value[tokenId] = "completed";
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `=== ${token.name} 已加入俱乐部，跳过申请 ===`,
+            message: `=== ${token.name} 已加入/已申请该俱乐部，跳过申请 ===`,
             type: "warning",
           });
         } else {
-          tokenStatus.value[tokenId] = "failed";
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${token.name} 申请俱乐部失败: ${errorMessage}`,
-            type: "error",
-          });
+          // 200020/1300040 等暂态（重复申请被拒等）降级，200330 无效ID保持红
+          const { code, level } = classifyBusinessError(error);
+          if (level !== "error") {
+            tokenStatus.value[tokenId] = "completed";
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 暂不可申请该俱乐部（${code}），下轮再试`,
+              type: level,
+            });
+          } else {
+            tokenStatus.value[tokenId] = "failed";
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 申请俱乐部失败: ${errorMessage}`,
+              type: "error",
+            });
+          }
         }
       } finally {
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
@@ -768,12 +780,13 @@ export function createTasksHangUp(deps) {
           });
           tokenStatus.value[tokenId] = "completed";
         } else {
+          // 回包缺 guessLegion 多为响应形态变化而非真实失败，降 warning 便于观察
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `=== ${token.name} 助威失败 ===`,
-            type: "error",
+            message: `=== ${token.name} 助威回包异常（无 guessLegion 字段），请检查日志 ===`,
+            type: "warning",
           });
-          tokenStatus.value[tokenId] = "failed";
+          tokenStatus.value[tokenId] = "completed";
         }
       } catch (error) {
         console.error(error);

@@ -1172,10 +1172,11 @@ export function createTasksTower(deps) {
               failCount++;
 
               if (failCount >= 3) {
+                // 打不过 BOSS 属正常游戏结果且后续领奖不受影响，不算系统失败
                 addLog({
                   time: new Date().toLocaleTimeString(),
-                  message: `${token.name} BOSS ${type} 连续失败3次，跳过`,
-                  type: "error",
+                  message: `${token.name} BOSS ${type} 连续失败3次（战力不足），跳过`,
+                  type: "warning",
                 });
                 loop = false;
               } else {
@@ -1237,14 +1238,20 @@ export function createTasksTower(deps) {
 
         let errorMessage = error.message;
         if (errorMessage && errorMessage.includes("200330")) {
-          errorMessage = "存在未完成的挑战，需要手动处理";
+          // 重跑遇上次未完成挑战属暂态：不算失败，继续完成后续领奖段
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 存在未完成的挑战（200330），跳过挑战继续领奖`,
+            type: "warning",
+          });
+        } else {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 换皮闯关失败: ${errorMessage}`,
+            type: "error",
+          });
         }
-
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 换皮闯关失败: ${errorMessage}`,
-          type: "error",
-        });
       } finally {
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
@@ -1386,12 +1393,26 @@ export function createTasksTower(deps) {
         });
       } catch (error) {
         console.error(error);
-        tokenStatus.value[tokenId] = "failed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 使用道具失败: ${error.message}`,
-          type: "error",
-        });
+        // 12300040=棋盘已满(需先合成腾位) / 400000=无可用道具 等暂态，不算失败
+        const { code, level } = classifyBusinessError(error);
+        if (level !== "error") {
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message:
+              code === 12300040
+                ? `${token.name} 棋盘已满，无法使用道具（12300040），请先执行合成`
+                : `${token.name} 使用道具暂不可执行（${code}），本轮跳过`,
+            type: level,
+          });
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 使用道具失败: ${error.message}`,
+            type: "error",
+          });
+        }
       } finally {
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
@@ -1802,11 +1823,13 @@ export function createTasksTower(deps) {
             consecutiveErrors = 0;
           } catch (err) {
             // Treat info fetch like openbox: retry, abort after repeated failures
+            // 此处直连未走限流器，evotower 属限流域，400340/200400 先按 warning 计数
             consecutiveErrors++;
+            const { level } = classifyBusinessError(err);
             addLog({
               time: new Date().toLocaleTimeString(),
               message: `${token.name} 获取怪异塔信息失败(${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}): ${err?.message || err}`,
-              type: "error",
+              type: level,
             });
             if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
               aborted = true;
@@ -1841,10 +1864,12 @@ export function createTasksTower(deps) {
                 costTotalCnt = infoRes?.mergeBox?.costTotalCnt || 0;
               } catch (err) {
                 consecutiveErrors++;
+                // 同 evotower_getinfo：直连未走限流器，限流码按 warning 计数
+                const { level } = classifyBusinessError(err);
                 addLog({
                   time: new Date().toLocaleTimeString(),
                   message: `${token.name} 获取活动信息失败(${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}): ${err?.message || err}`,
-                  type: "error",
+                  type: level,
                 });
                 if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
                   aborted = true;

@@ -1,4 +1,5 @@
 import { isDungeonOpen, merchantConfig } from "@/utils/dreamConstants";
+import { classifyBusinessError } from "@/utils/batch/errorClassifier";
 
 /**
  * 梦境类任务
@@ -83,12 +84,23 @@ export function createTasksDungeon(deps) {
         }
       } catch (error) {
         console.error(error);
-        tokenStatus.value[tokenId] = "failed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 咸王梦境失败: ${error.message || "未知错误"}`,
-          type: "error",
-        });
+        // 2600040=梦境暂无可执行操作(已完成或未开放) / 200020 等暂态，不算失败
+        const { code, level } = classifyBusinessError(error);
+        if (level !== "error") {
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 咸王梦境暂无可执行操作（${code}，已完成或未开放），下轮再试`,
+            type: level,
+          });
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 咸王梦境失败: ${error.message || "未知错误"}`,
+            type: "error",
+          });
+        }
       } finally {
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);

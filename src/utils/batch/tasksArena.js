@@ -4,6 +4,7 @@
  */
 
 import { ARENA_TARGET, FISH_TARGET } from "./constants.js";
+import { classifyBusinessError } from "./errorClassifier";
 
 /**
  * 创建竞技场、补齐类任务执行器
@@ -153,15 +154,30 @@ export function createTasksArena(deps) {
               {},
             );
           } catch (err) {
-            message.error(`获取竞技场目标失败：${err.message}`);
+            // 200160=竞技场未开启(小号)/2100010=活动未开放 等暂态：记录后跳出本轮
+            const { code, level } = classifyBusinessError(err);
+            if (level !== "error") {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 竞技场暂不可用（${code}），跳过本轮`,
+                type: level,
+              });
+            } else {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 获取竞技场目标失败：${err.message}`,
+                type: "warning",
+              });
+            }
             break;
           }
           const targetId = pickArenaTargetId(targets);
           if (!targetId) {
+            // 目标榜刷新瞬间可为空，与 batchTopUpArena 同场景的 warning 对齐
             addLog({
               time: new Date().toLocaleTimeString(),
-              message: `${token.name} 未找到可用的竞技场目标`,
-              type: "error",
+              message: `${token.name} 未找到可用的竞技场目标，可能刷新中，跳过本轮`,
+              type: "warning",
             });
             break;
           }
@@ -178,6 +194,26 @@ export function createTasksArena(deps) {
             });
             await new Promise((r) => setTimeout(r, delayConfig.battle));
           } catch (e) {
+            // 2600040/400000=今日免费次数已用完或无门票 → info 停止挑战；
+            // 200400/400340=限流 → warning 等待重试
+            const { code, level } = classifyBusinessError(e);
+            if (level === "info") {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 竞技场挑战次数已用完或无门票（${code}），停止挑战`,
+                type: "info",
+              });
+              break;
+            }
+            if (level === "warning") {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 操作过快被限频（${code}），等待5秒后重试`,
+                type: "warning",
+              });
+              await new Promise((r) => setTimeout(r, 5000));
+              continue;
+            }
             addLog({
               time: new Date().toLocaleTimeString(),
               message: `${token.name} 竞技场对决失败: ${e.message || "未知错误"}`,
@@ -283,11 +319,21 @@ export function createTasksArena(deps) {
               freeUsed++;
               await new Promise((r) => setTimeout(r, delayConfig.action));
             } catch (e) {
-              addLog({
-                time: new Date().toLocaleTimeString(),
-                message: `${token.name} 免费钓鱼失败: ${e.message}`,
-                type: "error",
-              });
+              // 400000/12000116/1000020=今日免费钓鱼已用完 等暂态，不算失败
+              const { code, level } = classifyBusinessError(e);
+              if (level !== "error") {
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} 今日免费钓鱼已用完（${code}），跳过`,
+                  type: level,
+                });
+              } else {
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} 免费钓鱼失败: ${e.message}`,
+                  type: "error",
+                });
+              }
               break;
             }
           }
@@ -419,11 +465,21 @@ export function createTasksArena(deps) {
 
             await new Promise((r) => setTimeout(r, delayConfig.battle));
           } catch (e) {
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `${token.name} 付费钓鱼失败: ${e.message}`,
-              type: "error",
-            });
+            // 400000=鱼竿耗尽(本地计数与服务器异步) 等暂态，不算失败
+            const { code, level } = classifyBusinessError(e);
+            if (level !== "error") {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 鱼竿不足或钓鱼暂不可用（${code}），停止补齐`,
+                type: level,
+              });
+            } else {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 付费钓鱼失败: ${e.message}`,
+                type: "error",
+              });
+            }
             break;
           }
         }
@@ -740,11 +796,21 @@ export function createTasksArena(deps) {
                 8000,
               );
             } catch (err) {
-              addLog({
-                time: new Date().toLocaleTimeString(),
-                message: `${token.name} 获取竞技场目标失败：${err.message}`,
-                type: "error",
-              });
+              // 200160=竞技场未开启/2100010=活动未开放 等暂态：记录后跳出本轮
+              const { code, level } = classifyBusinessError(err);
+              if (level !== "error") {
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} 竞技场暂不可用（${code}），跳过本轮`,
+                  type: level,
+                });
+              } else {
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} 获取竞技场目标失败：${err.message}`,
+                  type: "error",
+                });
+              }
               break;
             }
 
@@ -773,6 +839,26 @@ export function createTasksArena(deps) {
                 type: "info",
               });
             } catch (e) {
+              // 2600040/400000=门票/次数耗尽(本地计数与服务器异步) → info 停止补齐；
+              // 200400/400340=限流 → warning 等待重试
+              const { code, level } = classifyBusinessError(e);
+              if (level === "info") {
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} 竞技场门票或次数已用完（${code}），停止补齐`,
+                  type: "info",
+                });
+                break;
+              }
+              if (level === "warning") {
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} 操作过快被限频（${code}），等待5秒后重试`,
+                  type: "warning",
+                });
+                await new Promise((r) => setTimeout(r, 5000));
+                continue;
+              }
               addLog({
                 time: new Date().toLocaleTimeString(),
                 message: `${token.name} 竞技场对决失败：${e.message}`,

@@ -2,6 +2,7 @@
  * 营地挑战类任务
  * 包含: batchCampChallenge, batchCampClaimTasks
  */
+import { classifyBusinessError } from "@/utils/batch/errorClassifier";
 
 /**
  * 创建营地挑战类任务执行器
@@ -236,18 +237,29 @@ export function createTasksCampChallenge(deps) {
             addLog({
               time: new Date().toLocaleTimeString(),
               message: `${token.name} ${isWin ? "胜利" : "失败"}: ${opponentName} - ${defender.name}${rewardCount > 0 ? ` (获得${rewardCount}个奖励)` : ""}`,
-              type: isWin ? "success" : "error",
+              // 打输是正常战斗结果（后续挑战继续），不用红色误导为系统失败
+              type: isWin ? "success" : "warning",
             });
 
             if (isWin) {
               defender.defeated = true;
             }
           } catch (err) {
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `${token.name} 挑战 ${defender.name} 失败: ${err.message || "未知错误"}`,
-              type: "error",
-            });
+            // 200400/400340=挑战循环连发的限流暂态 → warning
+            const { code, level } = classifyBusinessError(err);
+            if (level !== "error") {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 挑战被限流（${code}），稍后重试`,
+                type: level,
+              });
+            } else {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} 挑战 ${defender.name} 失败: ${err.message || "未知错误"}`,
+                type: "error",
+              });
+            }
           }
         }
 
@@ -350,11 +362,22 @@ export function createTasksCampChallenge(deps) {
                 type: "success",
               });
             } catch (err) {
-              // 200020=暂无可领取/已领取, 13000160/13000170=未达标或未解锁, 均属正常
+              // 200020=暂无可领取/已领取, 13000160/13000170=未达标或未解锁,
+              // 700010=任务未达成, 200160=营地模块未开启(小号) 均属正常;
+              // 200400/400340=12个confId×4轮连发的限流暂态 → warning 中止本轮
+              const { code, level } = classifyBusinessError(err);
               const msg = err.message || "";
-              const nothingToClaim = NOTHING_TO_CLAIM_CODES.some((c) =>
-                msg.includes(c),
-              );
+              const nothingToClaim =
+                NOTHING_TO_CLAIM_CODES.some((c) => msg.includes(c)) ||
+                level === "info";
+              if (level === "warning") {
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} 领取被限流（${code}），中止本轮稍后重试`,
+                  type: "warning",
+                });
+                break;
+              }
               if (!nothingToClaim) {
                 addLog({
                   time: new Date().toLocaleTimeString(),
