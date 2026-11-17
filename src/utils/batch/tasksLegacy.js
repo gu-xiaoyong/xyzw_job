@@ -116,6 +116,39 @@ export function createTasksLegacy(deps) {
         });
         await ensureConnection(tokenId);
 
+        // 自愈：探索未开始先开启（与 dailyTaskRunner 同款），否则探索已结束/新账号
+        // 直接领取会报 12400160。getinfo/begin 失败不阻断，仍走 claim 让错误码分级兜底
+        try {
+          const info = await tokenStore.sendMessageWithPromise(
+            tokenId,
+            "legacy_getinfo",
+            {},
+            8000,
+          );
+          if (!Number(info?.roleLegacy?.hangUpBeginTime)) {
+            try {
+              await tokenStore.sendMessageWithPromise(
+                tokenId,
+                "legacy_beginhangup",
+                {},
+                8000,
+              );
+            } catch (beginError) {
+              // 200020 = 探索已在进行中，属正常
+              const beginCode =
+                beginError?.code ??
+                Number(/服务器错误: (\d+)/.exec(beginError.message || "")?.[1]);
+              if (beginCode !== 200020) throw beginError;
+            }
+          }
+        } catch (infoError) {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 探索状态检查失败，仍尝试直接领取: ${infoError.message}`,
+            type: "warning",
+          });
+        }
+
         const LegacyClaimHangUpResp = await tokenStore.sendMessageWithPromise(
           tokenId,
           "legacy_claimhangup",
@@ -130,18 +163,26 @@ export function createTasksLegacy(deps) {
         tokenStatus.value[tokenId] = "completed";
       } catch (error) {
         console.error(error);
-        // 200020 = 暂无可领取（挂机无积累）; 12400000 = 领取间隔未到（刚开启探索等），均为正常情况，降级 info 不算失败
+        // 200020 = 暂无可领取（挂机无积累）; 12400000 = 领取间隔未到（刚开启探索等）;
+        // 12400160 = 暂时不可领取（探索已结束/未开启等暂态，自愈流程已尝试重开），
+        // 均为正常情况，降级 info 不算失败，等下轮定时任务重试
         const codeMatch = /服务器错误: (\d+)/.exec(error.message || "");
         const errorCode =
           error?.code ?? (codeMatch ? Number(codeMatch[1]) : null);
-        if (errorCode === 200020 || errorCode === 12400000) {
+        if (
+          errorCode === 200020 ||
+          errorCode === 12400000 ||
+          errorCode === 12400160
+        ) {
           tokenStatus.value[tokenId] = "completed";
           addLog({
             time: new Date().toLocaleTimeString(),
             message:
               errorCode === 200020
                 ? `${token.name} 暂无可领取的功法残卷（若为新赛季请先用「批量功法残卷开启」开始探索）`
-                : `${token.name} 挂机奖励领取间隔未到，稍后再领`,
+                : errorCode === 12400000
+                  ? `${token.name} 挂机奖励领取间隔未到，稍后再领`
+                  : `${token.name} 功法残卷暂时不可领取（12400160），下轮再试`,
             type: "info",
           });
         } else {

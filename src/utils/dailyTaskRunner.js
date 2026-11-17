@@ -571,6 +571,11 @@ export class DailyTaskRunner {
             this.log("功法残卷领取间隔未到，稍后再领", "info");
             return true;
           }
+          if (code === 12400160) {
+            // 探索已结束/未开启等暂态（自愈流程已尝试重开），不算失败，下轮再领
+            this.log("功法残卷暂时不可领取（12400160），下轮再试", "info");
+            return true;
+          }
           this.log(`领取功法残卷失败: ${error.message || "未知错误"}`, "error");
           throw error;
         }
