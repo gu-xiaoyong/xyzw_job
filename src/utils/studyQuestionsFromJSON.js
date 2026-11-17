@@ -70,6 +70,31 @@ export async function loadQuestionsData() {
  */
 const unknownQuestions = new Set();
 
+/** 本轮答题的未命中收集：每次开始答题前清空，结束后由 UI 读取展示 */
+const runMissedQuestions = new Set();
+
+/** 开始一轮新的答题：清空本轮未命中记录 */
+export function beginQuestionRun() {
+  runMissedQuestions.clear();
+}
+
+/** 获取本轮答题中题库未命中的题目列表 */
+export function getRunMissedQuestions() {
+  return [...runMissedQuestions];
+}
+
+/** 记录一次未命中（全局收集 + 本轮收集，用于补充题库与 UI 展示） */
+function recordMissedQuestion(question) {
+  const text = String(question).trim();
+  unknownQuestions.add(text);
+  runMissedQuestions.add(text);
+}
+
+// 否定词守卫：一侧含否定词而另一侧不含时，极可能是「是/不是」类措辞相反的变体题。
+// 与错别字容错不同——这种匹配宁可不命中（盲选还有25%概率）也别自信答错
+const NEGATION_CHARS = ["不", "没", "非", "无"];
+const hasNegation = (text) => NEGATION_CHARS.some((c) => text.includes(c));
+
 /**
  * 获取已收集的未命中题目列表
  * @returns {string[]} 已收集的未命中题目列表
@@ -163,17 +188,36 @@ export async function findAnswer(question) {
     const target = normalizeQuestion(question);
     if (!target) return null;
 
-    // 第一轮：包含匹配
+    // 第一轮：包含匹配。收集全部候选而不是首条即返回——
+    // 短题名常是长题的子串且答案可能不同，取最长（最具体）者；
+    // 多候选答案互相冲突且最长者不够突出时视为歧义，宁可不命中
+    const containmentHits = [];
     for (let i = 0; i < questions.length; i++) {
       const item = questions[i];
       if (!item.name || !item.value) continue;
 
       const name = normalizeQuestion(item.name);
       if (!name) continue;
+      if (hasNegation(name) !== hasNegation(target)) continue;
 
       if (target.includes(name) || name.includes(target)) {
-        return item.value;
+        containmentHits.push({ item, name });
       }
+    }
+
+    if (containmentHits.length > 0) {
+      containmentHits.sort((a, b) => b.name.length - a.name.length);
+      const top = containmentHits[0];
+      const answerValues = new Set(containmentHits.map((c) => c.item.value));
+      if (answerValues.size > 1 && containmentHits.length >= 2) {
+        const runnerUp = containmentHits[1];
+        if (top.name.length - runnerUp.name.length < 2) {
+          // 歧义：多个不同答案的候选长度接近，无法自信判断
+          recordMissedQuestion(question);
+          return null;
+        }
+      }
+      return top.item.value;
     }
 
     // 第二轮：相似度兜底，处理题库与游戏文本的错别字/细微差异
@@ -185,6 +229,7 @@ export async function findAnswer(question) {
 
       const name = normalizeQuestion(item.name);
       if (!name) continue;
+      if (hasNegation(name) !== hasNegation(target)) continue;
       if (Math.abs(name.length - target.length) > MAX_LENGTH_DIFF) continue;
 
       const score = bigramSimilarity(target, name);
@@ -199,7 +244,7 @@ export async function findAnswer(question) {
     }
 
     // 记录未命中题目，便于后续补充题库
-    unknownQuestions.add(String(question).trim());
+    recordMissedQuestion(question);
     return null;
   } catch (error) {
     console.error("❌ 查找答案时出错:", error);

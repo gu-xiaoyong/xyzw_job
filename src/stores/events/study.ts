@@ -1,7 +1,7 @@
 import type { EVM, XyzwSession } from ".";
 import { isInCurrentWeek, sleep } from "@/utils/base";
 import { gameLogger } from "@/utils/logger";
-import { findAnswer } from "@/utils/studyQuestionsFromJSON";
+import { findAnswer, beginQuestionRun, getRunMissedQuestions } from "@/utils/studyQuestionsFromJSON";
 
 export const StudyPlugin = ({ onSome, $emit }: EVM) => {
   onSome(
@@ -70,6 +70,8 @@ export const StudyPlugin = ({ onSome, $emit }: EVM) => {
         wrongCount: null,
       };
       try {
+        // 开始新一轮答题：清空本轮题库未命中记录，答完后写入 studyStatus 供 UI 展示
+        beginQuestionRun();
         // 遍历题目并回答
         for (let i = 0; i < questionList.length; i++) {
           const question = questionList[i];
@@ -112,6 +114,8 @@ export const StudyPlugin = ({ onSome, $emit }: EVM) => {
             await sleep(300);
           }
         }
+        // 本轮题库未命中（已盲选默认答案）的题目列表，供批量任务日志展示、方便补题库
+        gameData.value.studyStatus.missedQuestions = getRunMissedQuestions();
         // 延迟1500ms后领取奖励
         await sleep(1500);
         $emit.emit("I-study-week-forward", data);

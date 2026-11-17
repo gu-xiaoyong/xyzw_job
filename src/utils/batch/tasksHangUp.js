@@ -347,6 +347,17 @@ export function createTasksHangUp(deps) {
               // 查询答题结果失败不影响任务结果
             }
           }
+
+          // 题库未命中的题目（盲选了默认答案A）：列出来方便对照游戏补题库
+          const missedQuestions =
+            tokenStore.gameData?.studyStatus?.missedQuestions || [];
+          if (missedQuestions.length > 0) {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 本轮${missedQuestions.length}题题库未命中(已盲选A): ${missedQuestions.join(" | ")}`,
+              type: "warning",
+            });
+          }
         } else {
           if (shouldStop.value) {
             addLog({
