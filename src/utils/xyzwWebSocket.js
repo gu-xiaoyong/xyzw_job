@@ -674,8 +674,7 @@ export class XyzwWebSocketClient {
     this.showMsg = false;
     this.connected = false;
     this.isReconnecting = false; // 重连状态标志
-    this.reconnectAttempts = 0; // 连续重连次数（成功后归零）
-    this.reconnectTimer = null; // 待执行的重连定时器
+    this.reconnectAttempts = 0; // 连续重连次数（成功后归零，用于指数退避）
 
     this.promises = Object.create(null);
     // 原始命令 → 等待中的 seq 集合（反向索引，避免每条推送 O(n) 全表扫描）
@@ -713,6 +712,7 @@ export class XyzwWebSocketClient {
       if (this.socket !== socket) return;
       wsLogger.info("连接成功");
       this.connected = true;
+      // 连上就清零，下次断开重新从 1 秒起步
       this.reconnectAttempts = 0;
       this.isReconnecting = false;
       // 启动心跳机制
@@ -1041,7 +1041,6 @@ export class XyzwWebSocketClient {
     this.disconnect();
     this.isReconnecting = true;
 
-    // 延迟重连，避免过于频繁
     const reconnectTimer = setTimeout(() => {
       if (this.reconnectTimer !== reconnectTimer) return;
       this.reconnectTimer = null;
