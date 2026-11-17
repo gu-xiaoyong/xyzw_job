@@ -188,6 +188,9 @@ export function createTasksTower(deps) {
         : currentSettings;
 
       try {
+        // 阵容还原放在 finally：中途任何异常/早退都不能把账号留在切换后的阵容
+        let Isswitching = false;
+        let currentFormation = null;
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `=== 开始爬塔: ${token.name} ===`,
@@ -210,8 +213,8 @@ export function createTasksTower(deps) {
           });
         }
 
-        const currentFormation = teamInfo?.presetTeamInfo?.useTeamId;
-        let Isswitching = false;
+        currentFormation = teamInfo?.presetTeamInfo?.useTeamId;
+        Isswitching = false;
         if (!tokenSettings.towerFormation) {
           addLog({
             time: new Date().toLocaleTimeString(),
@@ -397,14 +400,6 @@ export function createTasksTower(deps) {
             }
           }
         }
-        if (Isswitching) {
-          await tokenStore.sendMessageWithPromise(
-            tokenId,
-            "presetteam_saveteam",
-            { teamId: currentFormation },
-            5000,
-          );
-        }
         tokenStatus.value[tokenId] = "completed";
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -420,6 +415,28 @@ export function createTasksTower(deps) {
           type: "error",
         });
       } finally {
+        // 无论成功/异常/早退，切过阵容就必须还原（需在断开连接前执行）
+        if (Isswitching) {
+          try {
+            await tokenStore.sendMessageWithPromise(
+              tokenId,
+              "presetteam_saveteam",
+              { teamId: currentFormation },
+              5000,
+            );
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `已还原初始阵容${currentFormation}`,
+              type: "info",
+            });
+          } catch (restoreError) {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `阵容还原失败（${restoreError.message}），请手动检查阵容`,
+              type: "warning",
+            });
+          }
+        }
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
@@ -462,6 +479,9 @@ export function createTasksTower(deps) {
         : currentSettings;
 
       try {
+        // 阵容还原放在 finally：中途任何异常/早退都不能把账号留在切换后的阵容
+        let Isswitching = false;
+        let currentFormation = null;
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `=== 开始爬怪异塔: ${token.name} ===`,
@@ -484,8 +504,8 @@ export function createTasksTower(deps) {
           });
         }
 
-        const currentFormation = teamInfo?.presetTeamInfo?.useTeamId;
-        let Isswitching = false;
+        currentFormation = teamInfo?.presetTeamInfo?.useTeamId;
+        Isswitching = false;
         if (!tokenSettings.towerFormation) {
           addLog({
             time: new Date().toLocaleTimeString(),
@@ -826,14 +846,6 @@ export function createTasksTower(deps) {
             }
           }
         }
-        if (Isswitching) {
-          await tokenStore.sendMessageWithPromise(
-            tokenId,
-            "presetteam_saveteam",
-            { teamId: currentFormation },
-            5000,
-          );
-        }
         tokenStatus.value[tokenId] = "completed";
         const finishReason =
           stopReason ||
@@ -858,6 +870,28 @@ export function createTasksTower(deps) {
           type: "error",
         });
       } finally {
+        // 无论成功/异常/早退，切过阵容就必须还原（需在断开连接前执行）
+        if (Isswitching) {
+          try {
+            await tokenStore.sendMessageWithPromise(
+              tokenId,
+              "presetteam_saveteam",
+              { teamId: currentFormation },
+              5000,
+            );
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `已还原初始阵容${currentFormation}`,
+              type: "info",
+            });
+          } catch (restoreError) {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `阵容还原失败（${restoreError.message}），请手动检查阵容`,
+              type: "warning",
+            });
+          }
+        }
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({

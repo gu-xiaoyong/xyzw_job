@@ -56,6 +56,9 @@ export function createTasksArena(deps) {
         : currentSettings;
 
       try {
+        // 阵容还原放在 finally：中途任何异常/早退都不能把账号留在切换后的阵容
+        let Isswitching = false;
+        let currentFormation = null;
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `=== 开始一键竞技场战斗: ${token.name} ===`,
@@ -103,8 +106,8 @@ export function createTasksArena(deps) {
           });
         }
 
-        const currentFormation = teamInfo?.presetTeamInfo?.useTeamId;
-        let Isswitching = false;
+        currentFormation = teamInfo?.presetTeamInfo?.useTeamId;
+        Isswitching = false;
         if (currentFormation === tokenSettings.arenaFormation) {
           addLog({
             time: new Date().toLocaleTimeString(),
@@ -222,14 +225,6 @@ export function createTasksArena(deps) {
           }
         }
         await new Promise((r) => setTimeout(r, delayConfig.battle));
-        if (Isswitching) {
-          await tokenStore.sendMessageWithPromise(
-            tokenId,
-            "presetteam_saveteam",
-            { teamId: currentFormation },
-            5000,
-          );
-        }
         tokenStatus.value[tokenId] = "completed";
         addLog({
           time: new Date().toLocaleTimeString(),
@@ -245,6 +240,28 @@ export function createTasksArena(deps) {
           type: "error",
         });
       } finally {
+        // 无论成功/异常/早退，切过阵容就必须还原（需在断开连接前执行）
+        if (Isswitching) {
+          try {
+            await tokenStore.sendMessageWithPromise(
+              tokenId,
+              "presetteam_saveteam",
+              { teamId: currentFormation },
+              5000,
+            );
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `已还原初始阵容${currentFormation}`,
+              type: "info",
+            });
+          } catch (restoreError) {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `阵容还原失败（${restoreError.message}），请手动检查阵容`,
+              type: "warning",
+            });
+          }
+        }
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({
@@ -610,6 +627,9 @@ export function createTasksArena(deps) {
       const token = tokens.value.find((t) => t.id === tokenId);
 
       try {
+        // 阵容还原放在 finally：中途任何异常/早退都不能把账号留在切换后的阵容
+        let Isswitching = false;
+        let currentFormation = null;
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `=== 开始竞技场补齐: ${token.name} ===`,
@@ -631,8 +651,8 @@ export function createTasksArena(deps) {
           });
         }
 
-        const currentFormation = teamInfo?.presetTeamInfo?.useTeamId;
-        let Isswitching = false;
+        currentFormation = teamInfo?.presetTeamInfo?.useTeamId;
+        Isswitching = false;
         if (currentFormation === tokenSettings.arenaFormation) {
           addLog({
             time: new Date().toLocaleTimeString(),
@@ -950,14 +970,6 @@ export function createTasksArena(deps) {
             type: "warning",
           });
         }
-        if (Isswitching) {
-          await tokenStore.sendMessageWithPromise(
-            tokenId,
-            "presetteam_saveteam",
-            { teamId: currentFormation },
-            5000,
-          );
-        }
         tokenStatus.value[tokenId] = "completed";
       } catch (error) {
         console.error(error);
@@ -968,6 +980,28 @@ export function createTasksArena(deps) {
           type: "error",
         });
       } finally {
+        // 无论成功/异常/早退(如月度任务进度获取失败)，切过阵容就必须还原
+        if (Isswitching) {
+          try {
+            await tokenStore.sendMessageWithPromise(
+              tokenId,
+              "presetteam_saveteam",
+              { teamId: currentFormation },
+              5000,
+            );
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `已还原初始阵容${currentFormation}`,
+              type: "info",
+            });
+          } catch (restoreError) {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `阵容还原失败（${restoreError.message}），请手动检查阵容`,
+              type: "warning",
+            });
+          }
+        }
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
         addLog({

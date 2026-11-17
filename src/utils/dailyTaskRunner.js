@@ -25,6 +25,11 @@ const SILENT_ERROR_CODES = new Set([
   1400010, // 没有购买该月卡，不能领取每日奖励
 ]);
 
+// 跨实例记忆：上次运行结束时未能还原的阵容(如断线导致还原跳过)。
+// DailyTaskRunner 在批量流程里每账号每次运行都新建实例，实例字段无法跨轮保留，
+// 故用模块级 Map 记账，下次该账号运行开始时自动补还原，避免卡在临时阵容。
+const pendingFormationRestore = new Map();
+
 // 服务器"无事物可做"类错误码：不算失败，降级为 info 日志
 const INFO_ERROR_CODES = new Set([
   3500020, // 没有可领取的奖励（通行证等）
@@ -335,6 +340,26 @@ export class DailyTaskRunner {
     this.roleStateDirty = true;
     this.reportedProgress = undefined;
     this.loggedTaskStates = new Map();
+    // 上次运行结束时若因断线未能还原阵容，本轮开始时先补还原，
+    // 避免账号一直卡在上次的临时阵容(如BOSS阵容)并被误当成"当前阵容"
+    if (pendingFormationRestore.has(tokenId)) {
+      const pendingTarget = pendingFormationRestore.get(tokenId);
+      try {
+        await this.switchToFormationIfNeeded(
+          tokenId,
+          pendingTarget,
+          "上次未还原阵容",
+        );
+        pendingFormationRestore.delete(tokenId);
+        this.originalFormation = pendingTarget;
+        this.log(`已补还原上次未还原的阵容到 ${pendingTarget}`, "success");
+      } catch (error) {
+        this.log(
+          `补还原上次阵容(${pendingTarget})失败: ${error.message}，本轮继续（下轮再试）`,
+          "warning",
+        );
+      }
+    }
     this.throwIfInterrupted(tokenId);
     const settings = customSettings || this.loadSettings(tokenId);
     if (!settings) throw new Error("每日任务设置无法读取");
@@ -1115,12 +1140,7 @@ export class DailyTaskRunner {
         }
       }
     } finally {
-      if (
-        this.formationChanged &&
-        this.originalFormation !== undefined &&
-        (!this.tokenStore.getWebSocketStatus ||
-          this.tokenStore.getWebSocketStatus(tokenId) === "connected")
-      ) {
+      if (this.formationChanged && this.originalFormation !== undefined) {
         this.restoringFormation = true;
         try {
           await this.switchToFormationIfNeeded(
@@ -1128,8 +1148,15 @@ export class DailyTaskRunner {
             this.originalFormation,
             "初始阵容",
           );
+          pendingFormationRestore.delete(tokenId);
         } catch (error) {
-          this.log(`阵容还原失败: ${error.message}`, "warning");
+          // 还原失败(如连接已断开)：跨实例记忆，下次该账号执行日常任务开始时自动补还原，
+          // 否则账号会一直卡在临时阵容(如BOSS阵容)且下轮被误当成"当前阵容"
+          pendingFormationRestore.set(tokenId, this.originalFormation);
+          this.log(
+            `阵容还原失败: ${error.message} —— 已记录，将在下次执行时自动补还原到阵容${this.originalFormation}`,
+            "error",
+          );
         } finally {
           this.restoringFormation = false;
         }
