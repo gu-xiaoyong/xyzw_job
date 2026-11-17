@@ -36,7 +36,7 @@ export function createTasksLegacy(deps) {
   /**
    * 尝试开始功法探索(等价于游戏内点「开始」)
    * 先读 hangUpBeginTime 判断是否已在探索中, 已开始则不重复发送(避免重置探索周期)
-   * @returns {boolean} 是否确认已开始(或已在探索中)
+   * @returns {boolean} 是否确认已开始(或已在探索中，或暂态不可开始等下轮重试)
    */
   const tryStartExplore = async (tokenId, tokenName) => {
     try {
@@ -74,11 +74,22 @@ export function createTasksLegacy(deps) {
       return true;
     } catch (err) {
       const msg = err.message || "";
-      if (msg.includes("200020")) {
+      const codeMatch = /服务器错误: (\d+)/.exec(msg);
+      const errorCode = err?.code ?? (codeMatch ? Number(codeMatch[1]) : null);
+      if (errorCode === 200020) {
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `${tokenName} 探索已在进行中`,
           type: "info",
+        });
+        return true;
+      }
+      if (errorCode === 12400160) {
+        // 探索暂不可开始(次数上限/暂态限制)，不算失败，等下轮定时任务重试
+        addLog({
+          time: new Date().toLocaleTimeString(),
+          message: `${tokenName} 探索暂时无法开始（12400160），下轮再试`,
+          type: "warning",
         });
         return true;
       }
