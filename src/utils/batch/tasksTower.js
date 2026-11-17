@@ -6,6 +6,7 @@ import { extractTowerData, resolveTowerActId } from "../towerActId.js";
  * 包含: climbTower, climbWeirdTower, batchClaimFreeEnergy
  */
 import { normalizeWeirdTowerMaxClimb } from "../towerClimbLimit.js";
+import { classifyBusinessError } from "@/utils/batch/errorClassifier";
 import {
   isTowerRateLimited,
   runTowerCommand,
@@ -354,6 +355,20 @@ export function createTasksTower(deps) {
               // 重置连续失败计数，因为这是一个可恢复的错误
               consecutiveFailures = 0;
               continue;
+            }
+
+            // 1500010=已全部通关 / 400000=无次数 / 2100010=未开放 等暂态：
+            // 优雅停止本轮，不进连续失败计数，避免重复执行时刷红
+            {
+              const { code, level } = classifyBusinessError(err);
+              if (level === "info") {
+                addLog({
+                  time: new Date().toLocaleTimeString(),
+                  message: `${token.name} 爬塔暂不可继续（${code}），停止本轮`,
+                  type: "info",
+                });
+                break;
+              }
             }
 
             consecutiveFailures++;

@@ -2,6 +2,7 @@
  * 罐子类任务
  * 包含: resetBottles, batchlingguanzi
  */
+import { classifyBusinessError } from "@/utils/batch/errorClassifier";
 
 /**
  * 创建罐子类任务执行器
@@ -152,12 +153,23 @@ export function createTasksBottle(deps) {
         });
       } catch (error) {
         console.error(error);
-        tokenStatus.value[tokenId] = "failed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 领取盐罐失败: ${error.message || "未知错误"}`,
-          type: "error",
-        });
+        // 3500020/2600040=罐子未熟无可领取 等暂态属定时重跑常态，不算失败
+        const { code, level } = classifyBusinessError(error);
+        if (level !== "error") {
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 暂无可领取的盐罐（${code}），下轮再试`,
+            type: level,
+          });
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 领取盐罐失败: ${error.message || "未知错误"}`,
+            type: "error",
+          });
+        }
       } finally {
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);

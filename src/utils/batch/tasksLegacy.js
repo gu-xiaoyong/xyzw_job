@@ -370,13 +370,13 @@ export function createTasksLegacy(deps) {
             ) || 0;
           if (isScheduledTask) {
             if (legacyFragmentCount === 0) {
+              // 定时场景 0 残卷=上轮已送完，属最常见的"无事可做"态，不算失败
               addLog({
                 time: new Date().toLocaleTimeString(),
-                message: `=== ${token.name} 功法残卷不足，当前拥有: 0 ===`,
-                type: "error",
+                message: `=== ${token.name} 暂无功法残卷可赠送（上轮已送完），跳过 ===`,
+                type: "info",
               });
-              tokenStatus.value[tokenId] = "failed";
-              totalFailed++;
+              tokenStatus.value[tokenId] = "completed";
               break;
             }
             const rankroleinfo = await tokenStore.sendMessageWithPromise(

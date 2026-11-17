@@ -14,6 +14,7 @@ import {
   isApexRateLimited,
   runApexAction,
 } from "@/utils/apexRateLimit";
+import { classifyBusinessError } from "@/utils/batch/errorClassifier";
 import {
   ApexScheduleStatus,
   ApexStageType,
@@ -360,26 +361,32 @@ export function createTasksApex(deps) {
                   message: `${token.name} ${pick.name} 已竞猜过该队伍，跳过`,
                   type: "info",
                 });
-              } else {
-                failCount++;
-                let codeHint = "";
-                if (/服务器错误: 200000\b/.test(msg)) {
-                  codeHint = "（该场当前不可竞猜，可能未开始或已结束）";
-                }
-                addLog({
-                  time: new Date().toLocaleTimeString(),
-                  message: `${token.name} ${tab.title} 竞猜 ${pick.name} 失败: ${msg}${codeHint}`,
-                  type: "error",
-                });
-              }
-              if (isApexRateLimited(err)) {
-                // 重试仍被限流：停止该账号后续竞猜，等待自适应间隔恢复
+              } else if (isApexRateLimited(err)) {
+                // 限流前置判断：不再先记红再补 warning，直接中止该账号剩余竞猜
                 abortedByRateLimit = true;
                 addLog({
                   time: new Date().toLocaleTimeString(),
                   message: `${token.name} 连续被服务器限流（200400），约 ${Math.ceil(apexCooldownLeft(ApexAction.GUESS) / 1000)}s 后可继续，本次中止剩余竞猜`,
                   type: "warning",
                 });
+              } else {
+                const { code, level } = classifyBusinessError(err);
+                // 200000=该场未开始/已结束, 2100010=活动未开放: 无事可做态跳过
+                if (level !== "error" || /服务器错误: 200000\b/.test(msg)) {
+                  skipCount++;
+                  addLog({
+                    time: new Date().toLocaleTimeString(),
+                    message: `${token.name} ${pick.name} 当前不可竞猜（${code}，可能未开始或已结束/活动未开放），跳过`,
+                    type: level === "error" ? "info" : level,
+                  });
+                } else {
+                  failCount++;
+                  addLog({
+                    time: new Date().toLocaleTimeString(),
+                    message: `${token.name} ${tab.title} 竞猜 ${pick.name} 失败: ${msg}`,
+                    type: "error",
+                  });
+                }
               }
             }
           }

@@ -1,5 +1,6 @@
 import { HERO_DICT } from "@/utils/HeroList";
 import { PEACH_TASKS } from "@/utils/PeachTaskIds";
+import { classifyBusinessError } from "@/utils/batch/errorClassifier";
 
 /**
  * 开箱、钓鱼、招募类任务
@@ -483,12 +484,23 @@ export function createTasksItem(deps) {
         });
       } catch (error) {
         console.error(error);
-        tokenStatus.value[tokenId] = "failed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `领取失败: ${error.message}`,
-          type: "error",
-        });
+        // 400000=无积分可领 等暂态属定时重跑常态，不算失败
+        const { code, level } = classifyBusinessError(error);
+        if (level !== "error") {
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 暂无宝箱积分可领取（${code}），跳过`,
+            type: level,
+          });
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `领取失败: ${error.message}`,
+            type: "error",
+          });
+        }
       } finally {
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
@@ -1001,12 +1013,26 @@ export function createTasksItem(deps) {
         });
       } catch (error) {
         console.error(error);
-        tokenStatus.value[tokenId] = "failed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `开箱失败: ${error.message}`,
-          type: "error",
-        });
+        // 400000=箱子数量不足 / 12300040=背包已满 等属定时重跑常态，不算失败
+        const { code, level } = classifyBusinessError(error);
+        if (level !== "error") {
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message:
+              code === 12300040
+                ? `${token.name} 背包已满，无法开箱（12300040），请先清理或合成`
+                : `${token.name} 宝箱数量不足（${code}），本轮跳过`,
+            type: level,
+          });
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `开箱失败: ${error.message}`,
+            type: "error",
+          });
+        }
       } finally {
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);

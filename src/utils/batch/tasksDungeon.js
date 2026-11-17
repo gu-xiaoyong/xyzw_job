@@ -73,10 +73,12 @@ export function createTasksDungeon(deps) {
             type: "success",
           });
         } else {
+          // 非开放日属确定态的"无事可做"，不算失败（周二/五/六之外定时任务每天都会走到这）
+          tokenStatus.value[tokenId] = "completed";
           addLog({
             time: new Date().toLocaleTimeString(),
-            message: `=== ${token.name} 当前未在开放时间 ===`,
-            type: "error",
+            message: `=== ${token.name} 当前未在开放时间，跳过 ===`,
+            type: "warning",
           });
         }
       } catch (error) {

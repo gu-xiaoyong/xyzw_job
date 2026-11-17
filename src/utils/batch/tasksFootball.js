@@ -2,6 +2,7 @@
  * 盐杯竞猜任务
  * 包含: 一键批量竞猜
  */
+import { classifyBusinessError } from "@/utils/batch/errorClassifier";
 
 /**
  * 创建盐杯竞猜任务执行器
@@ -122,12 +123,23 @@ export function createTasksFootball(deps) {
               type: "success",
             });
           } catch (err) {
-            failCount++;
-            addLog({
-              time: new Date().toLocaleTimeString(),
-              message: `${token.name} ${matchId} 下注失败: ${err.message}`,
-              type: "error",
-            });
+            // 4800080=竞猜已截止 / 2100010=活动未开放 等暂态：betInfo 是一次性快照，
+            // 逐场下注与开赛/截止存在竞态，不算失败
+            const { code, level } = classifyBusinessError(err);
+            if (level !== "error") {
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} ${matchId} 竞猜已截止或未开放（${code}），跳过`,
+                type: level,
+              });
+            } else {
+              failCount++;
+              addLog({
+                time: new Date().toLocaleTimeString(),
+                message: `${token.name} ${matchId} 下注失败: ${err.message}`,
+                type: "error",
+              });
+            }
           }
 
           // 下注间隔
@@ -142,12 +154,23 @@ export function createTasksFootball(deps) {
         });
       } catch (error) {
         console.error(error);
-        tokenStatus.value[tokenId] = "failed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 盐杯竞猜失败: ${error.message}`,
-          type: "error",
-        });
+        // 2100010=活动未开放/已结束 等暂态属定时重跑常态，不算失败
+        const { code, level } = classifyBusinessError(error);
+        if (level !== "error") {
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 盐杯竞猜未开放或已结束（${code}），跳过`,
+            type: level,
+          });
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 盐杯竞猜失败: ${error.message}`,
+            type: "error",
+          });
+        }
       } finally {
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);

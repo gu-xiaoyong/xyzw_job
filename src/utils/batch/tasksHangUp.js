@@ -4,6 +4,7 @@
  */
 import { isInCurrentWeek } from "@/utils/base";
 import { fillHangUpTime, runWithDailyTaskLock } from "@/utils/dailyTaskState";
+import { classifyBusinessError } from "@/utils/batch/errorClassifier";
 
 /**
  * 判断本周答题是否已完成（答满10题且开始时间在本周内）
@@ -427,12 +428,26 @@ export function createTasksHangUp(deps) {
         });
       } catch (error) {
         console.error(error);
-        tokenStatus.value[tokenId] = "failed";
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 俱乐部签到失败: ${error.message || "未知错误"}`,
-          type: "error",
-        });
+        // 2300190=今日已签到 等暂态属定时重跑常态，不算失败（对齐 errorClassifier 字典）
+        const { code, level } = classifyBusinessError(error);
+        if (level !== "error") {
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message:
+              code === 2300190
+                ? `${token.name} 俱乐部今日已签到过，跳过`
+                : `${token.name} 俱乐部签到暂不可执行（${code}），下轮再试`,
+            type: level,
+          });
+        } else {
+          tokenStatus.value[tokenId] = "failed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 俱乐部签到失败: ${error.message || "未知错误"}`,
+            type: "error",
+          });
+        }
       } finally {
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
@@ -775,12 +790,26 @@ export function createTasksHangUp(deps) {
             type: "warning",
           });
         } else {
-          tokenStatus.value[tokenId] = "failed";
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${token.name} 助威失败: ${error.message || "未知错误"}`,
-            type: "error",
-          });
+          // 2100010=活动未开放 / 4800080=不在竞猜阶段 / 7900023=次数上限 均属定时重跑常态
+          const { code, level } = classifyBusinessError(error);
+          if (level !== "error") {
+            tokenStatus.value[tokenId] = "completed";
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message:
+                code === 7900023
+                  ? `${token.name} 助威次数已达上限（${code}），跳过`
+                  : `${token.name} 月赛竞猜未开放或不在竞猜阶段（${code}），跳过`,
+              type: level,
+            });
+          } else {
+            tokenStatus.value[tokenId] = "failed";
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 助威失败: ${error.message || "未知错误"}`,
+              type: "error",
+            });
+          }
         }
       } finally {
         await tokenStore.closeWebSocketConnectionAsync(tokenId);

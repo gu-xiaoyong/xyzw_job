@@ -10,6 +10,7 @@ import {
   normalizeBlackMarketPurchaseList,
   toStorePurchaseItemList,
 } from "./blackMarketConfig";
+import { classifyBusinessError } from "./errorClassifier";
 
 /**
  * 创建商店类任务执行器
@@ -375,12 +376,22 @@ export function createTasksStore(deps) {
         await sleep(delayConfig.action);
 
         if (result.error) {
-          addLog({
-            time: new Date().toLocaleTimeString(),
-            message: `${token.name} 珍宝阁领取失败: ${result.error}`,
-            type: "error",
-          });
-          tokenStatus.value[tokenId] = "failed";
+          // "今日已领取"类文本属定时重跑常态，不算失败
+          if (/已经领取|已领取过|已签到/.test(String(result.error))) {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 珍宝阁今日已领取过，跳过`,
+              type: "info",
+            });
+            tokenStatus.value[tokenId] = "completed";
+          } else {
+            addLog({
+              time: new Date().toLocaleTimeString(),
+              message: `${token.name} 珍宝阁领取失败: ${result.error}`,
+              type: "error",
+            });
+            tokenStatus.value[tokenId] = "failed";
+          }
         } else {
           addLog({
             time: new Date().toLocaleTimeString(),
@@ -390,12 +401,26 @@ export function createTasksStore(deps) {
           tokenStatus.value[tokenId] = "completed";
         }
       } catch (error) {
-        addLog({
-          time: new Date().toLocaleTimeString(),
-          message: `${token.name} 珍宝阁领取过程出错: ${error.message}`,
-          type: "error",
-        });
-        tokenStatus.value[tokenId] = "failed";
+        // 1000020=今日已领取 / 200160=珍宝阁未解锁 等暂态属定时重跑常态，不算失败
+        const { code, level } = classifyBusinessError(error);
+        if (level !== "error") {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message:
+              code === 200160
+                ? `${token.name} 珍宝阁未解锁（200160），跳过`
+                : `${token.name} 珍宝阁暂不可领取（${code}），下轮再试`,
+            type: level,
+          });
+          tokenStatus.value[tokenId] = "completed";
+        } else {
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 珍宝阁领取过程出错: ${error.message}`,
+            type: "error",
+          });
+          tokenStatus.value[tokenId] = "failed";
+        }
       } finally {
         await tokenStore.closeWebSocketConnectionAsync(tokenId);
         releaseConnectionSlot(tokenId);
