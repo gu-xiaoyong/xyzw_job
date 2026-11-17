@@ -362,6 +362,17 @@ export class DailyTaskRunner {
     const isTodayAvailable = (stamp) =>
       !Number.isFinite(stamp) || stamp < roleData.dailyTask.dailyTime;
 
+    // 官方字段：area:arena:last 记录今日竞技场战斗次数，上限 3 次
+    const getArenaRemainingFree = (role = this.roleData) => {
+      const statKey = "area:arena:last";
+      const statsTime = role.statisticsTime?.[statKey] ?? 0;
+      const isToday =
+        Number.isFinite(statsTime) &&
+        statsTime >= (role.dailyTask?.dailyTime || 0);
+      const usedToday = isToday ? Number(role.statistics?.[statKey]) || 0 : 0;
+      return Math.max(0, 3 - usedToday);
+    };
+
     const taskList = [];
 
     // 1. 基础任务
@@ -617,14 +628,16 @@ export class DailyTaskRunner {
       });
     }
 
-    // 2. 竞技场：把每日 3 次免费次数用完为止。
-    // 服务器任务13的进度=今日实际战斗场次（不封顶，如 3/1），据此补足剩余免费次数；
-    // 任务是否已领奖不影响战斗（免费次数与任务奖励是两回事），故不挂 condition
-    if (settings.arenaEnable) {
+    // 2. 竞技场：按官方 area:arena:last 计数器打满每日 3 次免费（含已领奖但免费未用完的场景，
+    //    计数器归零即停，天然防止超打烧门票——取代旧版任务进度+已领奖即跳过的粗粒度守卫）
+    if (
+      settings.arenaEnable &&
+      (getArenaRemainingFree() > 0 || !isTaskCompleted(13))
+    ) {
       taskList.push({
-        name: "竞技场战斗",
+        name: "竞技场免费挑战",
         execute: async () => {
-          this.log("开始竞技场战斗流程");
+          this.log("开始竞技场免费战斗流程");
           const hour = new Date().getHours();
           if (hour < 6) {
             this.log("当前时间未到6点，跳过竞技场战斗", "warning");
@@ -635,40 +648,39 @@ export class DailyTaskRunner {
             return true;
           }
 
-          const task13 = this.getTaskState(13);
-          if (task13.status === "claimed") {
-            // 已领奖说明当天套件已跑过：免费次数已在之前用完，重跑不再打（防止烧门票）
-            this.log("今日竞技场任务已领奖，免费次数已用完，跳过", "info");
-            return true;
-          }
-          // 未领奖时进度=今日实际场次（不封顶，如 3/1）
-          const foughtToday = Math.min(3, Math.floor(task13.progress || 0));
-          const arenaAttempts = 3 - foughtToday;
-          if (arenaAttempts <= 0) {
-            this.log("今日3次免费竞技场次数已用完，跳过", "info");
-            return true;
-          }
-          this.log(`今日免费竞技场剩余 ${arenaAttempts} 次`);
-
           await this.switchToFormationIfNeeded(
             tokenId,
             settings.arenaFormation,
             "竞技场阵容",
           );
-          await this.executeGameCommand(
-            tokenId,
-            "arena_startarea",
-            {},
-            "开始竞技场",
-          );
+          try {
+            await this.executeGameCommand(
+              tokenId,
+              "arena_startarea",
+              {},
+              "开始竞技场",
+            );
+          } catch (e) {
+            this.log(`进入竞技场提示: ${e.message}`, "info");
+          }
 
-          for (let i = 1; i <= arenaAttempts; i++) {
-            this.log(`竞技场战斗 ${i}/${arenaAttempts}`);
+          let battleCount = 0;
+          const maxSafetyLimit = 5;
+          while (
+            (getArenaRemainingFree() > 0 || !isTaskCompleted(13)) &&
+            battleCount < maxSafetyLimit
+          ) {
+            const leftFree = getArenaRemainingFree();
+            battleCount++;
+            this.log(
+              `竞技场战斗 第${battleCount}场 (当前剩余免费: ${leftFree}次)`,
+            );
+
             const targets = await this.executeGameCommand(
               tokenId,
               "arena_getareatarget",
               {},
-              `获取竞技场目标${i}`,
+              `获取竞技场目标${battleCount}`,
             );
 
             const targetId = pickArenaTargetId(targets);
@@ -677,18 +689,22 @@ export class DailyTaskRunner {
                 tokenId,
                 "fight_startareaarena",
                 { targetId },
-                `竞技场战斗${i}`,
+                `竞技场战斗第${battleCount}场`,
                 10000,
               );
             } else {
               this.log(
-                `竞技场战斗${i} - 未找到目标: ${JSON.stringify(targets)}`,
+                `竞技场战斗第${battleCount}场 - 未找到可用目标: ${JSON.stringify(targets)}`,
                 "warning",
               );
               return false;
             }
+
+            await this.refreshServerRole(tokenId);
             await this.sleep(1000);
           }
+
+          this.log(`竞技场战斗流程结束，共执行 ${battleCount} 场`);
           return true;
         },
       });
