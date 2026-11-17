@@ -700,7 +700,10 @@ test("pending counts include distinct supplemental failures without counting a f
     return send(...args);
   };
   const result = await f.runner().run("account-a", {}, settings);
-  assert.equal(result.failed, 2);
+  // 1000020(今日已领取)自 25d2733 起补进 INFO_ERROR_CODES 记跳过不计失败，
+  // 因此 failed 只剩 400010(物品不足)这一条真实失败；双重计数防护依旧由
+  // 「失败步骤不再把所属日常目标重复计一次」覆盖
+  assert.equal(result.failed, 1);
   assert.equal(result.remainingTasks, 1);
-  assert.equal(result.incomplete, 2);
+  assert.equal(result.incomplete, 1);
 });
