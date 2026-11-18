@@ -6,9 +6,9 @@ import { computed, ref, watch } from "vue";
 import useIndexedDB from "@/hooks/useIndexedDB";
 import router from "@/router";
 import { g_utils } from "@/utils/bonProtocol";
-import { gameReservations, isGameTokenRunning } from "@/utils/gameReservations";
-
 import { logInfo } from "@/utils/frontendLog";
+
+import { gameReservations, isGameTokenRunning } from "@/utils/gameReservations";
 import { gameLogger, tokenLogger, wsLogger } from "@/utils/logger";
 import { generateRandomSeed } from "@/utils/randomSeed";
 import {
@@ -45,6 +45,8 @@ declare interface TokenData {
   serverId?: string | number;
   roleId?: string | number;
   roleIndex?: number;
+  /** 最近一次通过 authuser 推导 roleToken 的时间戳（连接前凭据保鲜用） */
+  tokenDerivedAt?: number;
 }
 
 declare interface WebSocketConnection {
@@ -273,6 +275,7 @@ export const useTokenStore = defineStore("tokens", () => {
       createdAt: new Date().toISOString(),
       lastUsed: new Date().toISOString(),
       isActive: true,
+      tokenDerivedAt: Date.now(),
       // URL获取相关信息
       sourceUrl: tokenData.sourceUrl || null, // Token来源URL（用于刷新）
       importMethod: tokenData.importMethod || "manual", // 导入方式：manual 或 url
@@ -395,11 +398,17 @@ export const useTokenStore = defineStore("tokens", () => {
   // Token刷新尝试记录
   const tokenRefreshAttempts = ref<Record<string, number>>({});
 
-  // 尝试自动刷新Token
-  const attemptTokenRefresh = async (
-    tokenId: string,
-    forceReconnect = false,
-  ) => {
+  // 连接前凭据保鲜阈值：超过该时长未重新推导 roleToken，建连前先走一次 authuser。
+  // roleToken 复用约 7 天会被服务端拒绝（微信扫码/手机号登录 7 天掉线的根因），
+  // 与其依赖被动触发面很窄的失败刷新，不如建连前主动保鲜。
+  const CREDENTIAL_REFRESH_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+  /**
+   * 只重新推导凭据（combUser/bin → authuser → 新 roleToken），不触发任何重连。
+   * @param {string} tokenId 账号 ID。
+   * @returns {Promise<boolean>} 是否刷新成功（10 秒冷却内直接返回 false）。
+   */
+  const refreshTokenCredential = async (tokenId: string) => {
     // 检查冷却时间 (10秒)
     const lastAttempt = tokenRefreshAttempts.value[tokenId] || 0;
     const now = Date.now();
@@ -429,7 +438,11 @@ export const useTokenStore = defineStore("tokens", () => {
           return null;
         });
         if (token) {
-          updateToken(tokenId, { ...gameToken, token });
+          updateToken(tokenId, {
+            ...gameToken,
+            token,
+            tokenDerivedAt: Date.now(),
+          });
           wsLogger.info(`从URL获取token成功: ${gameToken.name}`);
           refreshSuccess = true;
         }
@@ -449,6 +462,7 @@ export const useTokenStore = defineStore("tokens", () => {
           roleId: refreshed.role.roleId,
           roleIndex: roleIndexFromServerId(refreshed.role.serverId),
           lastRefreshed: Date.now(),
+          tokenDerivedAt: Date.now(),
         } as any);
         refreshSuccess = true;
       } else if (gameToken.importMethod === "wxForceLogout") {
@@ -472,7 +486,11 @@ export const useTokenStore = defineStore("tokens", () => {
 
         if (userToken) {
           const token = await transformToken(userToken);
-          updateToken(tokenId, { ...gameToken, token });
+          updateToken(tokenId, {
+            ...gameToken,
+            token,
+            tokenDerivedAt: Date.now(),
+          });
           if (usedOldKey) {
             const saved = await storeArrayBuffer(tokenId, userToken);
             if (saved) {
@@ -485,12 +503,31 @@ export const useTokenStore = defineStore("tokens", () => {
         }
       }
     } catch (error) {
-      wsLogger.error(`Token刷新过程出错 [${tokenId}]:`, error);
+      const msg = String(error?.message || error);
+      if (/token|认证|登录|check|401|403/i.test(msg)) {
+        wsLogger.error(
+          `Token刷新失败(登录凭据已失效, 需重新扫码/短信登录或导入BIN) [${tokenId}]: ${msg}`,
+        );
+      } else {
+        wsLogger.error(`Token刷新过程出错 [${tokenId}]:`, error);
+      }
     }
 
     if (refreshSuccess) {
       wsLogger.info(`Token刷新成功 [${tokenId}]`);
+    } else {
+      wsLogger.error(`Token刷新失败，请手动重新导入 [${tokenId}]`);
+    }
+    return refreshSuccess;
+  };
 
+  /** 尝试自动刷新Token，成功后按页面路径决定是否重连。 */
+  const attemptTokenRefresh = async (
+    tokenId: string,
+    forceReconnect = false,
+  ) => {
+    const refreshSuccess = await refreshTokenCredential(tokenId);
+    if (refreshSuccess) {
       const currentPath = router.currentRoute.value.path;
       const shouldReconnect =
         forceReconnect ||
@@ -502,10 +539,43 @@ export const useTokenStore = defineStore("tokens", () => {
         selectToken(tokenId, true);
       }
       return true;
-    } else {
-      wsLogger.error(`Token刷新失败，请手动重新导入 [${tokenId}]`);
+    }
+    return false;
+  };
+
+  /**
+   * 建连前凭据保鲜：roleToken 推导时间超过阈值时，先用保存的
+   * combUser/bin 重新 authuser 换新 roleToken 再连，避免复用 7 天过期凭据。
+   * @param {string} tokenId 账号 ID。
+   * @returns {Promise<boolean>} 本次是否确实重新推导成功。
+   */
+  const refreshCredentialIfStale = async (tokenId: string) => {
+    const token = gameTokens.value.find((t) => t.id === tokenId);
+    if (!token) return false; // 测试连接等临时 ID 无账号记录，直接跳过
+    // 已连接/连接中不重推：authuser 会签发新会话，可能把活连接顶掉
+    const conn = wsConnections.value[tokenId];
+    if (conn && (conn.status === "connected" || conn.status === "connecting")) {
       return false;
     }
+    // 手动粘贴的纯 token 字符串没有可再推导的凭据，跳过；
+    // wxForceLogout 仅靠 combUser 推导，上面的 !!combUser 分支已覆盖
+    const canDerive =
+      !!token.combUser ||
+      (token.importMethod === "url" && !!token.sourceUrl) ||
+      ["bin", "wxQrcode", "mobile"].includes(token.importMethod);
+    if (!canDerive) return false;
+    const derivedAt = Number(token.tokenDerivedAt) || 0;
+    if (derivedAt && Date.now() - derivedAt < CREDENTIAL_REFRESH_MAX_AGE_MS) {
+      return false;
+    }
+    wsLogger.info(`连接前凭据保鲜: 重新推导 roleToken [${tokenId}]`);
+    const ok = await refreshTokenCredential(tokenId);
+    if (!ok) {
+      wsLogger.warn(
+        `连接前凭据推导失败，将继续用现有 Token 尝试连接 [${tokenId}]（若连接仍报凭据失效，请重新导入）`,
+      );
+    }
+    return ok;
   };
 
   // 游戏消息处理
@@ -535,7 +605,14 @@ export const useTokenStore = defineStore("tokens", () => {
           updateCrossTabConnectionState(tokenId, "disconnected");
           releaseConnectionLock(tokenId, "connect");
         }
-        if (errText.includes("token") && errText.includes("expired")) {
+        // 凭据失效判定拓宽：除 token+expired 外，check token error / token invalid /
+        // 踢下线等措辞同样说明 roleToken 已失效，否则 7 天过期后永远等不到刷新。
+        // 中文分支限定登录语境，避免"活动已过期"之类业务错误误触发
+        const shouldTryRefresh =
+          (errText.includes("token") &&
+            /expired|invalid|error|无效|过期/.test(errText)) ||
+          /登录.*(?:过期|失效)|重新登录|kick|强制下线|顶号|异地/.test(errText);
+        if (shouldTryRefresh) {
           const gameToken = gameTokens.value.find((t) => t.id === tokenId);
           if (gameToken) {
             // 调用统一的Token刷新逻辑
@@ -828,11 +905,12 @@ export const useTokenStore = defineStore("tokens", () => {
   // WebSocket连接管理（重构版 - 防重连）
   const createWebSocketConnection = async (
     tokenId: string,
-    base64Token: string,
+    storedBase64Token: string,
     customWsUrl = null,
   ) => {
     if (isGameTokenRunning(tokenId)) return null;
     wsLogger.info(`开始创建连接: ${tokenId}`);
+    let base64Token = storedBase64Token;
 
     // 1. 获取连接锁，防止竞态条件
     const connectLockOwner = await acquireConnectionLock(tokenId, "connect");
@@ -877,7 +955,17 @@ export const useTokenStore = defineStore("tokens", () => {
         releaseConnectionLock(tokenId, "connect");
         return null;
       }
-      // 5. 解析token
+      // 5. 连接前凭据保鲜：roleToken 长期复用约 7 天会被服务端拒绝，
+      //    超过保鲜阈值先用 combUser/bin 重新推导，再用新 Token 建连。
+      //    仅在确实刷新成功时替换，保持调用方传入 Token 的原语义
+      const refreshedBeforeConnect = await refreshCredentialIfStale(tokenId);
+      if (refreshedBeforeConnect) {
+        const freshToken = gameTokens.value.find((t) => t.id === tokenId);
+        if (freshToken?.token) {
+          base64Token = freshToken.token;
+        }
+      }
+      // 6. 解析token
       const parseResult = parseBase64Token(base64Token);
       let actualToken;
       if (parseResult.success) {
@@ -889,7 +977,7 @@ export const useTokenStore = defineStore("tokens", () => {
           throw new Error(`Token无效: ${parseResult.error}`);
         }
       }
-      // 6. 构建WebSocket URL
+      // 7. 构建WebSocket URL
       const baseWsUrl = `wss://xxz-xyzw.hortorgames.com/agent?p=${encodeURIComponent(actualToken)}&e=x&lang=chinese`;
 
       const wsUrl = customWsUrl || baseWsUrl;
@@ -898,7 +986,7 @@ export const useTokenStore = defineStore("tokens", () => {
         `Token: ${actualToken.substring(0, 10)}...${actualToken.slice(-4)}`,
       );
 
-      // 7. 创建新的WebSocket客户端（增强版）
+      // 8. 创建新的WebSocket客户端（增强版）
       const wsClient = new XyzwWebSocketClient({
         url: wsUrl,
         canConnect: () => !isGameTokenRunning(tokenId),
@@ -906,7 +994,7 @@ export const useTokenStore = defineStore("tokens", () => {
         heartbeatMs: 5000,
       });
 
-      // 8. 设置连接状态（带会话ID）
+      // 9. 设置连接状态（带会话ID）
       wsConnections.value[tokenId] = {
         client: wsClient,
         status: "connecting",
@@ -936,7 +1024,7 @@ export const useTokenStore = defineStore("tokens", () => {
         releaseConnectionLock(tokenId, "connect");
       }, 20000);
 
-      // 9. 设置事件监听（增强版）
+      // 10. 设置事件监听（增强版）
       wsClient.onConnect = () => {
         if (!isCurrentConnection()) return;
         if (isGameTokenRunning(tokenId)) {
@@ -944,7 +1032,11 @@ export const useTokenStore = defineStore("tokens", () => {
           return;
         }
         wsLogger.wsConnect(tokenId);
-        logInfo("WS 连接成功", { tokenId, sessionId: currentSessionId, url: wsUrl });
+        logInfo("WS 连接成功", {
+          tokenId,
+          sessionId: currentSessionId,
+          url: wsUrl,
+        });
         if (wsConnections.value[tokenId]) {
           wsConnections.value[tokenId].status = "connected";
           wsConnections.value[tokenId].connectedAt = new Date().toISOString();
@@ -974,12 +1066,17 @@ export const useTokenStore = defineStore("tokens", () => {
           code: event.code,
           reason: event.reason || "",
           wasClean: event.wasClean,
-          aliveMs: connectedAt ? Date.now() - new Date(connectedAt).getTime() : null,
-          reconnectAttempts: wsConnections.value[tokenId]?.reconnectAttempts ?? 0,
+          aliveMs: connectedAt
+            ? Date.now() - new Date(connectedAt).getTime()
+            : null,
+          reconnectAttempts:
+            wsConnections.value[tokenId]?.reconnectAttempts ?? 0,
         });
         if (wsConnections.value[tokenId]) {
           const conn = wsConnections.value[tokenId];
           const wasDisconnecting = conn.status === "disconnecting";
+          // 在下方置 false 前留档：1006 时"是否已完成登录"决定要不要刷凭据
+          const wasAuthenticated = conn.authenticated === true;
           if (!wasDisconnecting) {
             if (!conn.lastError) {
               setTokenConnectionError(
@@ -998,9 +1095,16 @@ export const useTokenStore = defineStore("tokens", () => {
           conn.randomSeedSynced = false;
           updateCrossTabConnectionState(tokenId, "disconnected");
 
-          // 如果连接异常断开(1006)且从未连接成功(握手失败)，尝试刷新Token
-          // connectedAt 为 null 表示 socket.onopen 还没触发就断开了，通常意味着握手失败（如403 Forbidden）
-          if (event.code === 1006 && !conn.connectedAt && !wasDisconnecting) {
+          // 连接异常断开(1006)且尚未完成登录时，尝试刷新Token
+          // ① connectedAt 为 null：socket.onopen 没触发就断开（握手被拒，如403）
+          // ② 连上了但从未通过 role_getroleinforesp 认证：服务端接受握手后
+          //    校验 p 参数里的 roleToken 失败立即踢掉，此时 connectedAt 已置位，
+          //    只看 connectedAt 会漏掉这种 7 天过期最常见的断开形态
+          if (
+            event.code === 1006 &&
+            !wasDisconnecting &&
+            (!conn.connectedAt || !wasAuthenticated)
+          ) {
             wsLogger.warn(`检测到握手失败(1006)，尝试刷新Token [${tokenId}]`);
             // 强制刷新并重连
             await attemptTokenRefresh(tokenId, true);
@@ -1021,7 +1125,7 @@ export const useTokenStore = defineStore("tokens", () => {
         releaseConnectionLock(tokenId, "connect", connectLockOwner);
       };
 
-      // 10. 设置消息监听
+      // 11. 设置消息监听
       wsClient.setMessageListener((message: ProtoMsg) => {
         if (!isCurrentConnection()) return;
         const cmd = message?.cmd || "unknown";
@@ -1037,7 +1141,7 @@ export const useTokenStore = defineStore("tokens", () => {
         }
       });
 
-      // 11. 初始化连接
+      // 12. 初始化连接
       wsClient.init();
 
       delete createConnectionFailureReason[tokenId];
@@ -1267,7 +1371,13 @@ export const useTokenStore = defineStore("tokens", () => {
       if (retryLeft > 0 && errMsg.includes("200400")) {
         logInfo("请求被限流，退避重试", { tokenId, cmd });
         await new Promise((resolve) => setTimeout(resolve, 700));
-        return sendMessageWithPromise(tokenId, cmd, params, timeout, retryLeft - 1);
+        return sendMessageWithPromise(
+          tokenId,
+          cmd,
+          params,
+          timeout,
+          retryLeft - 1,
+        );
       }
       return Promise.reject(error);
     }

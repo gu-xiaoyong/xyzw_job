@@ -208,6 +208,7 @@ async function createStore() {
       },
       "@/router": { default: { currentRoute: ref({ path: "/tokens" }) } },
       "@/utils/bonProtocol": { g_utils: {} },
+      "@/utils/frontendLog": { logInfo() {} },
       "@/utils/gameReservations": {
         gameReservations: {},
         isGameTokenRunning: () => false,

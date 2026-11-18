@@ -175,8 +175,25 @@ export const getServerList = async (arrayBuffer: ArrayBuffer) => {
   const msg = g_utils.parse(res.data);
   // console.log("解析结果:", msg);
 
+  // 凭据失效时服务端返回错误 protobuf（error/code 有值、data 为空），
+  // 不显式抛出会退化成 "Cannot read properties of undefined" 掩盖真实原因
+  if (msg?.error || msg?.code) {
+    throw Object.assign(
+      new Error(
+        getTokenErrorMessage(
+          msg.error || msg.hint || "获取角色列表失败",
+          msg.code,
+        ),
+      ),
+      { code: msg.code, rawMessage: msg.error || msg.hint },
+    );
+  }
+
   const data = msg.getData();
-  console.log("数据内容:", data);
+  // console.log("数据内容:", data);
+  if (!data?.roles) {
+    throw new Error("角色列表响应为空，登录凭据可能已失效，请重新导入");
+  }
   return JSON.stringify({
     ...data.roles,
   });
