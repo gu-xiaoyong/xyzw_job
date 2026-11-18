@@ -1,12 +1,12 @@
+import { classifyBusinessError } from "@/utils/batch/errorClassifier";
 import { isSameGameValue } from "@/utils/gameValue.js";
-import { extractTowerData, resolveTowerActId } from "../towerActId.js";
 
+import { extractTowerData, resolveTowerActId } from "../towerActId.js";
 /**
  * 爬塔类任务
  * 包含: climbTower, climbWeirdTower, batchClaimFreeEnergy
  */
 import { normalizeWeirdTowerMaxClimb } from "../towerClimbLimit.js";
-import { classifyBusinessError } from "@/utils/batch/errorClassifier";
 import {
   isTowerRateLimited,
   runTowerCommand,
@@ -187,10 +187,12 @@ export function createTasksTower(deps) {
         ? loadSettings(tokenId) || currentSettings
         : currentSettings;
 
+      // 阵容还原状态声明在 try 外：finally 与 try 是同级块，
+      // 块级作用域跨块不可见，声明在 try 内会让 finally 抛 ReferenceError，
+      // 跳过关连接/释放槽位并让 Promise.all 整体 reject（isRunning 永不复位）
+      let Isswitching = false;
+      let currentFormation = null;
       try {
-        // 阵容还原放在 finally：中途任何异常/早退都不能把账号留在切换后的阵容
-        let Isswitching = false;
-        let currentFormation = null;
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `=== 开始爬塔: ${token.name} ===`,
@@ -447,10 +449,13 @@ export function createTasksTower(deps) {
       }
     });
 
-    await Promise.all(taskPromises);
-
-    isRunning.value = false;
-    currentRunningTokenId.value = null;
+    // 单账号 promise 拒绝也不能让 isRunning 卡在 true（收尾状态必须复位）
+    try {
+      await Promise.all(taskPromises);
+    } finally {
+      isRunning.value = false;
+      currentRunningTokenId.value = null;
+    }
     message.success("批量爬塔结束");
   };
 
@@ -478,10 +483,12 @@ export function createTasksTower(deps) {
         ? loadSettings(tokenId) || currentSettings
         : currentSettings;
 
+      // 阵容还原状态声明在 try 外：finally 与 try 是同级块，
+      // 块级作用域跨块不可见，声明在 try 内会让 finally 抛 ReferenceError，
+      // 跳过关连接/释放槽位并让 Promise.all 整体 reject（isRunning 永不复位）
+      let Isswitching = false;
+      let currentFormation = null;
       try {
-        // 阵容还原放在 finally：中途任何异常/早退都不能把账号留在切换后的阵容
-        let Isswitching = false;
-        let currentFormation = null;
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `=== 开始爬怪异塔: ${token.name} ===`,
@@ -902,10 +909,13 @@ export function createTasksTower(deps) {
       }
     });
 
-    await Promise.all(taskPromises);
-
-    isRunning.value = false;
-    currentRunningTokenId.value = null;
+    // 单账号 promise 拒绝也不能让 isRunning 卡在 true（收尾状态必须复位）
+    try {
+      await Promise.all(taskPromises);
+    } finally {
+      isRunning.value = false;
+      currentRunningTokenId.value = null;
+    }
     message.success("批量爬怪异塔结束");
   };
 
@@ -1270,7 +1280,7 @@ export function createTasksTower(deps) {
         console.error(error);
         tokenStatus.value[tokenId] = "failed";
 
-        let errorMessage = error.message;
+        const errorMessage = error.message;
         if (errorMessage && errorMessage.includes("200330")) {
           // 重跑遇上次未完成挑战属暂态：不算失败，继续完成后续领奖段
           tokenStatus.value[tokenId] = "completed";

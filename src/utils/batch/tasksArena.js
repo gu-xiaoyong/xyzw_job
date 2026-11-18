@@ -55,10 +55,12 @@ export function createTasksArena(deps) {
         ? loadSettings(tokenId) || currentSettings
         : currentSettings;
 
+      // 阵容还原状态声明在 try 外：finally 与 try 是同级块，
+      // 块级作用域跨块不可见，声明在 try 内会让 finally 抛 ReferenceError，
+      // 跳过关连接/释放槽位并让 Promise.all 整体 reject（isRunning 永不复位）
+      let Isswitching = false;
+      let currentFormation = null;
       try {
-        // 阵容还原放在 finally：中途任何异常/早退都不能把账号留在切换后的阵容
-        let Isswitching = false;
-        let currentFormation = null;
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `=== 开始一键竞技场战斗: ${token.name} ===`,
@@ -272,9 +274,13 @@ export function createTasksArena(deps) {
       }
     });
 
-    await Promise.all(taskPromises);
-    isRunning.value = false;
-    currentRunningTokenId.value = null;
+    // 单账号 promise 拒绝也不能让 isRunning 卡在 true（收尾状态必须复位）
+    try {
+      await Promise.all(taskPromises);
+    } finally {
+      isRunning.value = false;
+      currentRunningTokenId.value = null;
+    }
     message.success("批量竞技场战斗结束");
   };
 
@@ -626,10 +632,12 @@ export function createTasksArena(deps) {
         : currentSettings;
       const token = tokens.value.find((t) => t.id === tokenId);
 
+      // 阵容还原状态声明在 try 外：finally 与 try 是同级块，
+      // 块级作用域跨块不可见，声明在 try 内会让 finally 抛 ReferenceError，
+      // 跳过关连接/释放槽位并让 Promise.all 整体 reject（isRunning 永不复位）
+      let Isswitching = false;
+      let currentFormation = null;
       try {
-        // 阵容还原放在 finally：中途任何异常/早退都不能把账号留在切换后的阵容
-        let Isswitching = false;
-        let currentFormation = null;
         addLog({
           time: new Date().toLocaleTimeString(),
           message: `=== 开始竞技场补齐: ${token.name} ===`,
@@ -1012,9 +1020,13 @@ export function createTasksArena(deps) {
       }
     });
 
-    await Promise.all(taskPromises);
-    isRunning.value = false;
-    currentRunningTokenId.value = null;
+    // 单账号 promise 拒绝也不能让 isRunning 卡在 true（收尾状态必须复位）
+    try {
+      await Promise.all(taskPromises);
+    } finally {
+      isRunning.value = false;
+      currentRunningTokenId.value = null;
+    }
     message.success("批量竞技场补齐结束");
   };
 
