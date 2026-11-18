@@ -30,3 +30,8 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+    # nginx 模板 envsubst 需要 API_KEY 注入 /api/pushing 的 x-api-key，
+    # 与 api 容器读同一份 .env.docker 保证两容器密钥一致
+    env_file:
+      - path: .env.docker
+        required: false

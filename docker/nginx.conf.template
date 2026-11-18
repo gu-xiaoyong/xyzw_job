@@ -110,6 +110,34 @@ server {
         add_header Cache-Control "no-store" always;
     }
 
+    # 后台推关：转发到 api 容器（render-backend，与 vite dev 的 /api/pushing 代理同语义）。
+    # 鉴权用 api 容器同一份 API_KEY，由 nginx 官方镜像的 templates envsubst 注入 ${API_KEY}。
+    # 走请求期 DNS 变量（resolver 见文件头），单跑 web 容器无 api 时仅此路由 502，前端不受影响。
+    location ^~ /api/pushing/ {
+        limit_except GET HEAD POST { deny all; }
+        client_max_body_size 1m;
+        set $api_upstream http://api:3000;
+        proxy_pass $api_upstream;
+        proxy_set_header x-api-key "${API_KEY}";
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_read_timeout 65s;
+        proxy_redirect off;
+        add_header Cache-Control "no-store" always;
+    }
+
+    # 前端埋点日志（render-backend 公开接口，落盘 logs/）
+    location = /frontend-log {
+        limit_except POST { deny all; }
+        client_max_body_size 256k;
+        set $api_upstream http://api:3000;
+        proxy_pass $api_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_read_timeout 65s;
+        proxy_redirect off;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }
