@@ -1,3 +1,5 @@
+import { bon } from "./bonProtocol.js";
+
 const configsByVersion = new Map();
 const activeTokenRuns = new Set();
 
@@ -167,6 +169,44 @@ export async function fillHangUpTime({
 }
 
 /**
+ * 官方任务配置的候选下载源，按顺序尝试，全部失败才报错。
+ *
+ * 游戏客户端对 "config" 资产有两条加载路径（见协议 dump）：
+ * 1. /data/{版本}/config.json   —— 纯 JSON；
+ * 2. /data/{版本}/configc.bin   —— BON 二进制（与 json 内容一致，游戏主体平台一直走这条）。
+ * 2026-11-20 观测到服务端下发的新版本 config.json 404 而定时任务中断，
+ * 故 json 失败后必须回退 bin 源；备 CDN 域名取自游戏自身的多 CDN 切换表。
+ */
+export const DAILY_CONFIG_SOURCES = [
+  {
+    label: "主CDN(config.json)",
+    url: (version) =>
+      `https://xxz-xyzw-res.hortorgames.com/data/${version}/config.json`,
+    parse: (response) => response.json(),
+  },
+  {
+    label: "主CDN(configc.bin)",
+    url: (version) =>
+      `https://xxz-xyzw-res.hortorgames.com/data/${version}/configc.bin`,
+    parse: async (response) =>
+      bon.decode(new Uint8Array(await response.arrayBuffer())),
+  },
+  {
+    label: "备CDN(config.json)",
+    url: (version) =>
+      `https://xxz-xyzw-alires.hortorgames.com/data/${version}/config.json`,
+    parse: (response) => response.json(),
+  },
+  {
+    label: "备CDN(configc.bin)",
+    url: (version) =>
+      `https://xxz-xyzw-alires.hortorgames.com/data/${version}/configc.bin`,
+    parse: async (response) =>
+      bon.decode(new Uint8Array(await response.arrayBuffer())),
+  },
+];
+
+/**
  * Load task targets from the official data version returned by the game server.
  * Only immutable configuration is cached; role progress is never cached here.
  * @param {object} tokenStore Live command transport.
@@ -190,13 +230,25 @@ export async function loadDailyTaskConfig(
     throw new Error("服务器未提供有效的任务配置版本");
   if (!configsByVersion.has(version)) {
     const loading = (async () => {
-      const response = await fetchConfig(
-        `https://xxz-xyzw-res.hortorgames.com/data/${version}/config.json`,
-        { signal: AbortSignal.timeout(30000) },
+      // 依次尝试各下载源；单个源失败（非 2xx / 网络错误 / 解码或校验失败）换下一个。
+      const failures = [];
+      for (const source of DAILY_CONFIG_SOURCES) {
+        try {
+          const response = await fetchConfig(source.url(version), {
+            signal: AbortSignal.timeout(30000),
+          });
+          if (!response.ok) {
+            failures.push(`${source.label}: HTTP ${response.status}`);
+            continue;
+          }
+          return validateDailyTaskConfig(await source.parse(response));
+        } catch (error) {
+          failures.push(`${source.label}: ${error.message}`);
+        }
+      }
+      throw new Error(
+        `官方任务配置读取失败（版本 ${version}）：${failures.join("；")}`,
       );
-      if (!response.ok) throw new Error("官方任务配置读取失败");
-      const config = await response.json();
-      return validateDailyTaskConfig(config);
     })();
     configsByVersion.set(version, loading);
     loading.catch(() => {

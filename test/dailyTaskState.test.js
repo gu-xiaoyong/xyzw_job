@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { bon } from "../src/utils/bonProtocol.js";
 import {
+  DAILY_CONFIG_SOURCES,
   getClaimablePointRewards,
   getDailyTaskStates,
   loadDailyTaskConfig,
@@ -134,22 +136,27 @@ test("config version is verified each run while immutable configuration requests
 });
 
 test("failed config reads can be retried and unsafe versions are rejected", async () => {
-  let attempt = 0;
+  const failedUrls = new Set();
   const store = {
     async sendMessageWithPromise() {
       return { dataBundleVer: "test-config-retry" };
     },
   };
-  const fetchConfig = async () => ({
-    ok: ++attempt > 1,
-    json: async () => officialConfig(),
-  });
+  // 每个候选源第一次请求都失败，模拟 CDN 整体不可用
+  const fetchConfig = async (url) => {
+    if (!failedUrls.has(url)) {
+      failedUrls.add(url);
+      return { ok: false };
+    }
+    return { ok: true, json: async () => officialConfig() };
+  };
   await assert.rejects(
     loadDailyTaskConfig(store, "a", fetchConfig),
     /读取失败/,
   );
+  assert.equal(failedUrls.size, DAILY_CONFIG_SOURCES.length);
+  // 整体失败后缓存被清空，下一轮可以整体重试
   await loadDailyTaskConfig(store, "a", fetchConfig);
-  assert.equal(attempt, 2);
   await assert.rejects(
     loadDailyTaskConfig(
       {
@@ -162,6 +169,29 @@ test("failed config reads can be retried and unsafe versions are rejected", asyn
     ),
     /有效/,
   );
+});
+
+test("falls back to the BON configc.bin source when config.json is unavailable", async () => {
+  const requested = [];
+  const store = {
+    async sendMessageWithPromise() {
+      return { dataBundleVer: "test-config-bon" };
+    },
+  };
+  const binBytes = bon.encode(officialConfig());
+  const fetchConfig = async (url) => {
+    requested.push(url);
+    if (url.endsWith("/config.json")) return { ok: false };
+    return {
+      ok: true,
+      arrayBuffer: async () => binBytes.slice().buffer,
+    };
+  };
+  const config = await loadDailyTaskConfig(store, "a", fetchConfig);
+  assert.equal(config.tasks.length, 3);
+  const binUrls = requested.filter((url) => url.endsWith("configc.bin"));
+  assert.equal(binUrls.length, 1);
+  assert.ok(binUrls[0].includes("xxz-xyzw-res.hortorgames.com"));
 });
 
 test("duplicate point-reward IDs are rejected before duplicate claims can be scheduled", () => {
@@ -178,18 +208,34 @@ test("an evicted failed config request cannot remove a newer cached request for 
   const started = new Promise((resolve) => {
     entered = resolve;
   });
-  let readsA = 0;
+  const requestCounts = new Map();
   const store = {
     sendMessageWithPromise: async (id) => ({ dataBundleVer: id }),
   };
+  const okResponse = () => ({
+    ok: true,
+    json: async () => officialConfig(),
+    arrayBuffer: async () => new ArrayBuffer(0),
+  });
   const fetchConfig = async (url) => {
-    if (url.includes("cache-race-a") && ++readsA === 1) {
+    const count = (requestCounts.get(url) ?? 0) + 1;
+    requestCounts.set(url, count);
+    if (
+      count === 1 &&
+      /xxz-xyzw-res\.hortorgames\.com\/data\/cache-race-a\/config\.json$/.test(
+        url,
+      )
+    ) {
       entered();
       return new Promise((resolve, reject) => {
         rejectFirst = reject;
       });
     }
-    return { ok: true, json: async () => officialConfig() };
+    if (url.includes("cache-race-a") && count === 1) {
+      // 旧请求挂起期间，其余候选一律失败，保证它只在 rejectFirst 后才整体失败
+      return { ok: false };
+    }
+    return okResponse();
   };
   const first = loadDailyTaskConfig(store, "cache-race-a", fetchConfig);
   const rejected = assert.rejects(first, /first request failed/);
@@ -199,5 +245,10 @@ test("an evicted failed config request cannot remove a newer cached request for 
   rejectFirst(new Error("first request failed"));
   await rejected;
   await loadDailyTaskConfig(store, "cache-race-a", fetchConfig);
-  assert.equal(readsA, 2);
+  const retriedUrl = [...requestCounts.keys()].find((url) =>
+    /xxz-xyzw-res\.hortorgames\.com\/data\/cache-race-a\/config\.json$/.test(
+      url,
+    ),
+  );
+  assert.equal(requestCounts.get(retriedUrl), 2);
 });
