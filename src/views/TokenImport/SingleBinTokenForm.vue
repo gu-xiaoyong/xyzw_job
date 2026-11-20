@@ -37,7 +37,7 @@
         <input
           ref="fileInputRef"
           multiple
-          accept=".bin,.dmp"
+          accept="*.bin,*.dmp"
           style="display: none"
           type="file"
           :disabled="isBusy"
