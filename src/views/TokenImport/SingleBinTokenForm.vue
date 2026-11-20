@@ -190,7 +190,9 @@ import { getTokenErrorMessage } from "@/utils/tokenLogin";
 const emit = defineEmits(["cancel", "ok", "lock"]);
 const tokenStore = useTokenStore();
 const message = useMessage();
-const { storeArrayBuffer, isReady } = useIndexedDB();
+// 惰性 Hook：isReady 只在首个成功存储操作后置位，因此这里不做就绪预检查，
+// 存储不可用（如手机浏览器隐私模式）由 saveBinToken 内部的实际操作报错
+const { storeArrayBuffer } = useIndexedDB();
 const fileInputRef = ref(null);
 const processListRef = ref(null);
 const isDragOver = ref(false);
@@ -377,10 +379,6 @@ const processFiles = async (files) => {
 
 const handleImport = async () => {
   if (isBusy.value || !roleList.value.length) return;
-  if (!isReady.value) {
-    message.error("浏览器存储尚未就绪，请稍后重试");
-    return;
-  }
   isImporting.value = true;
   emit("lock", true);
   let added = 0;
