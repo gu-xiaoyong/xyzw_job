@@ -211,6 +211,53 @@ const router = createRouter({
 // 热更新路由
 autoRoutes.handleHotUpdate?.(router);
 
+// 懒加载页面 chunk 拉取失败（弱网下点击菜单触发的新请求被掐断，或站点更新后
+// 旧 chunk 404）时给出可见反馈：不处理的话路由跳转无声卡死，用户只会觉得
+// "点了没反应"。动态 import 失败的结果会被浏览器缓存，重试必须整页刷新绕开。
+// 注意 Chrome 网络层失败只抛裸的 "Failed to fetch"，需单独匹配。
+const CHUNK_ERROR_PATTERN =
+  /dynamically imported module|importing a module script failed|loading(?: css)? chunk .* failed|failed to fetch/i;
+
+function showChunkRetryOverlay(targetPath) {
+  if (document.getElementById("chunk-retry-overlay")) return;
+  const overlay = document.createElement("div");
+  overlay.id = "chunk-retry-overlay";
+  overlay.style.cssText =
+    "position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.45);" +
+    "display:flex;align-items:center;justify-content:center;padding:24px;";
+  overlay.innerHTML = `
+    <div style="max-width:360px;width:100%;background:#fff;border-radius:12px;padding:24px;text-align:center;">
+      <div style="font-size:40px;line-height:1;">📡</div>
+      <h3 style="margin:12px 0 8px;font-size:17px;color:#1f2329;">页面资源加载失败</h3>
+      <p style="margin:0 0 4px;color:#4e5969;font-size:13px;line-height:1.6;">
+        网络不稳定或站点刚更新，导致页面文件没下载下来。
+      </p>
+      <p style="margin:0 0 16px;color:#86909c;font-size:12px;">
+        大陆访问 pages.dev 波动较大，可稍后重试或换网络
+      </p>
+      <button id="chunk-retry-reload" type="button"
+        style="width:100%;padding:10px 0;margin-bottom:10px;border:none;border-radius:8px;background:#4f46e5;color:#fff;font-size:15px;cursor:pointer;">
+        重新加载
+      </button>
+      <button id="chunk-retry-close" type="button"
+        style="width:100%;padding:10px 0;border:none;border-radius:8px;background:#f2f3f5;color:#4e5969;font-size:14px;cursor:pointer;">
+        暂不
+      </button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector("#chunk-retry-reload").addEventListener("click", () => {
+    window.location.assign(targetPath);
+  });
+  overlay.querySelector("#chunk-retry-close").addEventListener("click", () => {
+    overlay.remove();
+  });
+}
+
+router.onError((error, to) => {
+  if (!CHUNK_ERROR_PATTERN.test(error?.message || "")) return;
+  showChunkRetryOverlay(to?.fullPath || "/");
+});
+
 // 导航守卫
 router.beforeEach((to, from, next) => {
   const tokenStore = useTokenStore();
