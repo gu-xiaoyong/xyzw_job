@@ -78,6 +78,16 @@
             </n-icon>
             <span>消息测试</span>
           </router-link>
+          <router-link
+            to="/admin/nightmare-lab"
+            class="nav-item"
+            active-class="active"
+          >
+            <n-icon>
+              <ArrowUpCircle />
+            </n-icon>
+            <span>十殿组队</span>
+          </router-link>
           <!-- Full backup / restore entry -->
           <router-link
             to="/admin/backup"
@@ -207,6 +217,16 @@
             <ChatbubbleEllipsesSharp />
           </n-icon>
           <span>消息测试</span>
+        </router-link>
+        <router-link
+          to="/admin/nightmare-lab"
+          class="drawer-item"
+          @click="isMobileMenuOpen = false"
+        >
+          <n-icon>
+            <ArrowUpCircle />
+          </n-icon>
+          <span>十殿组队</span>
         </router-link>
         <router-link
           to="/admin/backup"

@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -25,13 +26,23 @@ function sleep(ms) {
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// 前端埋点会上报 WS 报文（base64 后单条可达数十 KB），默认 100kb 会直接 413，
+// 这里放宽到 1mb；路由内部仍按 FRONTEND_LOG_MAX_BATCH 限制条数。
+app.use(express.json({ limit: "1mb" }));
 
 // ==================== 访问鉴权 ====================
 // 除 /health 外全部要求 x-backend-key 与环境变量 BACKEND_KEY 一致：
 // API 上明文存放游戏 Token，必须防止被陌生人读取
 app.use((req, res, next) => {
   if (req.path === "/health") return next();
+  // 前端埋点两条遥测路由公开：游戏页(ws-trace)与十殿实验台都是静态页面，
+  // 拿不到密钥；POST 只追加日志行，GET /recent 只回吐游戏页上报的原始帧
+  if (
+    (req.path === "/frontend-log" && req.method === "POST") ||
+    (req.path === "/frontend-log/recent" && req.method === "GET")
+  ) {
+    return next();
+  }
   const key = process.env.BACKEND_KEY;
   if (!key) {
     return res
@@ -50,7 +61,9 @@ app.use((req, res, next) => {
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const supabase =
-  SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+  SUPABASE_URL && SUPABASE_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_KEY)
+    : null;
 
 // ==================== 任务定义 ====================
 const TASK_DEFINITIONS = {
@@ -568,13 +581,64 @@ app.post("/frontend-log", (req, res) => {
       level: String(item.level || "info").slice(0, 10),
       message: String(item.message ?? "").slice(0, FRONTEND_LOG_MAX_LEN),
       page: item.page ? String(item.page).slice(0, 300) : undefined,
-      sessionId: item.sessionId ? String(item.sessionId).slice(0, 64) : undefined,
-      userAgent: item.userAgent ? String(item.userAgent).slice(0, 300) : undefined,
+      sessionId: item.sessionId
+        ? String(item.sessionId).slice(0, 64)
+        : undefined,
+      userAgent: item.userAgent
+        ? String(item.userAgent).slice(0, 300)
+        : undefined,
       meta: item.meta ?? undefined,
     });
     written += 1;
   }
   res.json({ ok: true, written });
+});
+
+/**
+ * 读取最近的埋点记录（只读，仅用于调试面板）。
+ *
+ * 用途：十殿房间状态只通过 `nightmare_roominfo_notify` 推送，而助手的连接
+ * 收不到这条推送（只有游戏页那条 WS 收得到）。所以这里把游戏页已上报的
+ * 原始帧回吐给前端，由前端用 BON 解码器重放，重建房间状态。
+ */
+app.get("/frontend-log/recent", (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 4000, 8000);
+    const file = path.join(
+      LOG_DIR,
+      `frontend-${new Date().toISOString().slice(0, 10)}.log`,
+    );
+    if (!fs.existsSync(file)) return res.json({ ok: true, entries: [] });
+
+    // 只读文件尾部，避免把整份日志读进内存
+    const size = fs.statSync(file).size;
+    const maxBytes = 8 * 1024 * 1024;
+    const start = Math.max(0, size - maxBytes);
+    const fd = fs.openSync(file, "r");
+    const buffer = Buffer.alloc(size - start);
+    try {
+      fs.readSync(fd, buffer, 0, buffer.length, start);
+    } finally {
+      fs.closeSync(fd);
+    }
+
+    const lines = buffer.toString("utf8").split("\n").filter(Boolean);
+    const onlyGame = req.query.onlyGame === "1";
+    const entries = [];
+    for (const line of lines.slice(-limit)) {
+      try {
+        const entry = JSON.parse(line);
+        // 只要游戏页上报的原始帧，避免把整站日志都吐出去
+        if (onlyGame && !String(entry.page || "").startsWith("/game")) continue;
+        entries.push(entry);
+      } catch {
+        // 首行可能被截断，忽略
+      }
+    }
+    res.json({ ok: true, entries });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: String(error?.message || error) });
+  }
 });
 
 // 本地保留的按路由鉴权中间件（与全局 createApiKeyMiddleware 同一凭证，双保险）
@@ -605,7 +669,9 @@ app.use("/api", createApiKeyMiddleware());
 const NO_DB_ROUTES = ["/logs", "/task-definitions", "/pushing"];
 app.use("/api", (req, res, next) => {
   if (supabase) return next();
-  if (NO_DB_ROUTES.some((p) => req.path === p || req.path.startsWith(`${p}/`))) {
+  if (
+    NO_DB_ROUTES.some((p) => req.path === p || req.path.startsWith(`${p}/`))
+  ) {
     return next();
   }
   return res
@@ -931,7 +997,11 @@ app.post("/api/pushing/start", async (req, res) => {
   }
   try {
     const result = await pushingRunner.start({ tokenIds, tokens, options });
-    addLog("INFO", "pushing", `后台推关启动：${hasTokens ? tokens.length : tokenIds.length} 个账号`);
+    addLog(
+      "INFO",
+      "pushing",
+      `后台推关启动：${hasTokens ? tokens.length : tokenIds.length} 个账号`,
+    );
     res.json(result);
   } catch (error) {
     addLog("ERROR", "pushing", `启动后台推关失败: ${error.message}`);
@@ -950,7 +1020,11 @@ app.post("/api/pushing/stop", (req, res) => {
   const result = all
     ? pushingRunner.stopAll()
     : pushingRunner.stop(String(tokenId || ""));
-  addLog("INFO", "pushing", all ? "停止全部后台推关" : `停止后台推关: ${tokenId}`);
+  addLog(
+    "INFO",
+    "pushing",
+    all ? "停止全部后台推关" : `停止后台推关: ${tokenId}`,
+  );
   res.json(result);
 });
 

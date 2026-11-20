@@ -102,7 +102,11 @@ test("multi-game bootstrap gates every game runtime behind the storage bridge", 
   const staticScriptSources = [
     ...multiGameHtml.matchAll(/<script\s+src="([^"]+)"/g),
   ].map((match) => match[1]);
-  assert.deepEqual(staticScriptSources, ["multi-game-storage-bridge.js"]);
+  // ws-trace.js 是十殿实验台的报文录制脚本（只上报埋点，不执行游戏逻辑）
+  assert.deepEqual(staticScriptSources, [
+    "ws-trace.js?v=4",
+    "multi-game-storage-bridge.js",
+  ]);
 
   for (const runtimeFile of expectedRuntimeFiles) {
     assert.ok(multiGameHtml.includes(`"${runtimeFile}"`), runtimeFile);

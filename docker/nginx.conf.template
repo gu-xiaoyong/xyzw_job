@@ -127,9 +127,21 @@ server {
     }
 
     # 前端埋点日志（render-backend 公开接口，落盘 logs/）
+    # WS 报文 base64 后单条可达数十 KB，与后端 express.json limit 1mb 对齐
     location = /frontend-log {
         limit_except POST { deny all; }
-        client_max_body_size 256k;
+        client_max_body_size 1m;
+        set $api_upstream http://api:3000;
+        proxy_pass $api_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_read_timeout 65s;
+        proxy_redirect off;
+    }
+
+    # 十殿实验台回放游戏页原始帧（只读，仅返回 /game 页面上报的条目）
+    location = /frontend-log/recent {
+        limit_except GET { deny all; }
         set $api_upstream http://api:3000;
         proxy_pass $api_upstream;
         proxy_http_version 1.1;

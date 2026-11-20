@@ -18,6 +18,8 @@ export default antfu(
       "src/xyzw/**",
       "src/utils/apexStageMap.js",
       "src/utils/readable-xyzw-ws.js",
+      // 游戏页注入脚本：刻意保持 ES5 风格适配 WebView，不参与风格检查
+      "public/game/ws-trace.js",
       "public/game/{assets,src}/**",
       "public/game/{cocos2d-*,game-defines.*,main.*,patch*,sh1*,xh.js}",
       "**/*.md",

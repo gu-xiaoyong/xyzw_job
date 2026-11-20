@@ -16,6 +16,18 @@ const MAX_RECONNECT_ATTEMPTS = 8;
 /** 单次重连的最大退避延迟（ms） */
 const MAX_RECONNECT_DELAY = 30000;
 
+// 仅开发环境把组队命令原始帧录进前端埋点。Vite 会在浏览器构建时静态替换
+// process.env.NODE_ENV；VM 测试 harness 以非模块 Script 加载本文件且没有
+// process 全局，用 try 兜底跳过（import.meta 在该 harness 下是语法错误，不能用）
+const IS_DEV_SEND_TRACE = (() => {
+  try {
+    // eslint-disable-next-line node/prefer-global/process -- 依赖 Vite 对 process.env.NODE_ENV 的静态替换，浏览器代码不能 require("process")
+    return process.env.NODE_ENV === "development";
+  } catch {
+    return false;
+  }
+})();
+
 /**
  * 错误码映射表
  * 用于将服务器返回的错误码转换为可读的错误描述
@@ -218,6 +230,22 @@ const RESPONSE_TO_COMMAND_MAP = {
   towers_getinforesp: "towers_getinfo",
   towers_startresp: "towers_start",
   towers_fightresp: "towers_fight",
+  // 十殿试炼组队
+  matchteam_createresp: "matchteam_create",
+  matchteam_joinresp: "matchteam_join",
+  matchteam_memberprepareresp: "matchteam_memberprepare",
+  matchteam_getteaminforesp: "matchteam_getteaminfo",
+  matchteam_dismissresp: "matchteam_dismiss",
+  matchteam_getrandteamlistresp: "matchteam_getrandteamlist",
+  hero_calcpowerbyteamresp: "hero_calcpowerbyteam",
+  matchteam_openteamresp: "matchteam_openteam",
+  nightmare_setfighterresp: "nightmare_setfighter",
+  nightmare_fightresp: "nightmare_fight",
+  nightmare_leadercompleteresp: "nightmare_leadercomplete",
+  nightmare_getroominforesp: "nightmare_getroominfo",
+  nightmare_restoreresp: "nightmare_restore",
+  queue_getinforesp: "queue_getinfo",
+  nmext_getinforesp: "nmext_getinfo",
   // 特殊响应映射 - 有些命令有独立响应，有些用同步响应
   task_claimdailyrewardresp: "task_claimdailyreward",
   task_claimweekrewardresp: "task_claimweekreward",
@@ -500,6 +528,55 @@ export function registerDefaultCommands(reg) {
     .register("nightmare_getroleinfo")
     .register("dungeon_selecthero")
     .register("dungeon_buymerchant")
+    // 十殿试炼（NightMare）组队 —— 命令与字段来自 2026-11-10 实机抓包确认
+    .register("matchteam_create", {
+      teamCfgId: 1,
+      setting: {
+        name: "",
+        notice: "",
+        secret: 1,
+        apply: 0,
+        applyList: [],
+        star: 0,
+      },
+      param: 0,
+      custom: {},
+      extParam: 0,
+    })
+    .register("matchteam_join", { teamId: "" })
+    .register("matchteam_memberprepare", { teamId: "" })
+    .register("matchteam_getteaminfo", { teamId: "" })
+    .register("matchteam_dismiss", { teamId: "" })
+    // 十殿开团：队长进入房间（房间号由 nightmare_roominfo_notify 推送，不在返回值里）
+    .register("matchteam_openteam", { teamId: "" })
+    // 十殿战斗：指定上场者 / 发起战斗（服务端模拟，请求体只有 roomId + roleId）/ 队长确认本层完成
+    .register("nightmare_setfighter", { roomId: "", roleId: 0 })
+    .register("nightmare_fight", { roomId: "", roleId: 0 })
+    .register("nightmare_leadercomplete", { roomId: "" })
+    // 房间全量快照：客户端进房间（含从战斗返回）时发，返回 roomInfo（含 boss curMonsterData）
+    .register("nightmare_getroominfo", { roomId: "" })
+    // 恢复（阵亡武将回满）：队长可替队员发，body = { roomId, roleId: 被恢复的人 }
+    .register("nightmare_restore", { roomId: "", roleId: 0 })
+    .register("nightmare_roominfo_notify")
+    .register("nightmare_fightnotify")
+    .register("matchteam_getrandteamlist")
+    // 建队前置：为组队玩法（teamType=3）设置上阵阵容，游戏客户端建队前必发
+    .register("team_setteam", {
+      teamType: 3,
+      battleTeam: {},
+      lordWeaponId: 0,
+      petUId: "",
+      cCMonsterId: 0,
+    })
+    // 建队前置：按当前阵容算战力，游戏在 team_setteam 之前先发这条
+    .register("hero_calcpowerbyteam", {
+      battleTeam: {},
+      lordWeaponId: 0,
+      petUId: "",
+    })
+    .register("matchteam_notify")
+    .register("queue_getinfo")
+    .register("nmext_getinfo")
     // 活动/任务
     .register("activity_get")
     .register("activity_recyclewarorderrewardclaim")
@@ -1313,6 +1390,43 @@ export class XyzwWebSocketClient {
 
         // 编码并发送
         const bin = this.registry.encodePacket(raw);
+
+        // 调试埋点：把本客户端发出的组队命令原始帧也录进前端埋点日志，
+        // 便于和游戏页抓到的同一命令做字节级对比（仅开发环境）
+        if (IS_DEV_SEND_TRACE && /^matchteam_|^team_setteam$/.test(raw.cmd)) {
+          try {
+            const bytes = new Uint8Array(bin);
+            let binary = "";
+            for (let i = 0; i < bytes.length; i += 0x8000) {
+              binary += String.fromCharCode.apply(
+                null,
+                bytes.subarray(i, i + 0x8000),
+              );
+            }
+            fetch("/frontend-log", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                logs: [
+                  {
+                    ts: new Date().toISOString(),
+                    level: "debug",
+                    message: `helper-ws:${raw.cmd}`,
+                    page: "/helper-ws",
+                    meta: {
+                      dir: "out",
+                      kind: "bin",
+                      b64: btoa(binary),
+                      ws: "helper",
+                    },
+                  },
+                ],
+              }),
+            }).catch(() => {});
+          } catch {
+            // 忽略埋点失败
+          }
+        }
         if (
           this.socket !== socket ||
           !this.connected ||
