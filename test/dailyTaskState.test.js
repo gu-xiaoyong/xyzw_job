@@ -113,6 +113,20 @@ test("point reward selection uses server points and claimed map for daily and we
   );
 });
 
+function bundleManifest() {
+  const native = [];
+  native[10] = 5;
+  native[11] = "17431";
+  // paths 与 uuids 是平行数组：paths["5"] 对应 uuids[5]，必须用稀疏数组对齐索引
+  const uuids = [];
+  uuids[5] = "ffrEZCeQdEDaF8CLPFWVY0";
+  return {
+    paths: { 5: ["configc", 1] },
+    uuids,
+    versions: { native },
+  };
+}
+
 test("config version is verified each run while immutable configuration requests are merged", async () => {
   let reads = 0;
   let versions = 0;
@@ -122,16 +136,20 @@ test("config version is verified each run while immutable configuration requests
       return { dataBundleVer: "test-config-merge" };
     },
   };
-  const fetchConfig = async () => {
+  const binBytes = bon.encode(officialConfig());
+  const fetchConfig = async (url) => {
     reads++;
-    return { ok: true, json: async () => officialConfig() };
+    if (url.includes("/remote/config/config.test-config-merge.json"))
+      return { ok: true, json: async () => bundleManifest() };
+    return { ok: true, arrayBuffer: async () => binBytes.slice().buffer };
   };
   const [a, b] = await Promise.all([
     loadDailyTaskConfig(store, "a", fetchConfig),
     loadDailyTaskConfig(store, "b", fetchConfig),
   ]);
   assert.equal(a, b);
-  assert.equal(reads, 1);
+  // bundle 源一次加载 = 清单 + native 数据 两次请求，并发账号合并后共 2 次
+  assert.equal(reads, 2);
   assert.equal(versions, 2);
 });
 
@@ -169,6 +187,35 @@ test("failed config reads can be retried and unsafe versions are rejected", asyn
     ),
     /有效/,
   );
+});
+
+test("loads config via the cocos remote bundle manifest and native BON file", async () => {
+  const store = {
+    async sendMessageWithPromise() {
+      return { dataBundleVer: "test-config-bundle" };
+    },
+  };
+  const manifest = bundleManifest();
+  const binBytes = bon.encode(officialConfig());
+  const requested = [];
+  const fetchConfig = async (url) => {
+    requested.push(url);
+    if (url.endsWith("/remote/config/config.test-config-bundle.json"))
+      return { ok: true, json: async () => manifest };
+    if (
+      /\/remote\/config\/native\/ff\/ffac4642-7907-440d-a17c-08b3c5595634\.17431\.bin$/.test(
+        url,
+      )
+    )
+      return { ok: true, arrayBuffer: async () => binBytes.slice().buffer };
+    return { ok: false };
+  };
+  const config = await loadDailyTaskConfig(store, "a", fetchConfig);
+  assert.equal(config.tasks.length, 3);
+  const bundleUrls = requested.filter((url) => url.includes("/remote/config/"));
+  assert.equal(bundleUrls.length, 2);
+  assert.ok(bundleUrls[0].includes("xxz-xyzw-res.hortorgames.com"));
+  assert.ok(bundleUrls[1].includes("/remote/config/native/ff/"));
 });
 
 test("falls back to the BON configc.bin source when config.json is unavailable", async () => {
@@ -209,6 +256,7 @@ test("an evicted failed config request cannot remove a newer cached request for 
     entered = resolve;
   });
   const requestCounts = new Map();
+  let hung = false;
   const store = {
     sendMessageWithPromise: async (id) => ({ dataBundleVer: id }),
   };
@@ -220,19 +268,23 @@ test("an evicted failed config request cannot remove a newer cached request for 
   const fetchConfig = async (url) => {
     const count = (requestCounts.get(url) ?? 0) + 1;
     requestCounts.set(url, count);
-    if (
-      count === 1 &&
-      /xxz-xyzw-res\.hortorgames\.com\/data\/cache-race-a\/config\.json$/.test(
-        url,
-      )
-    ) {
+    if (!hung) {
+      hung = true;
       entered();
       return new Promise((resolve, reject) => {
         rejectFirst = reject;
       });
     }
-    if (url.includes("cache-race-a") && count === 1) {
-      // 旧请求挂起期间，其余候选一律失败，保证它只在 rejectFirst 后才整体失败
+    if (url.includes("cache-race-a")) {
+      // 挂起的旧请求被拒后其余候选一律快速失败；
+      // 并发的新请求只放行 data json 的首次请求，保持"新请求先完成并占住缓存"的竞态原意
+      if (
+        count === 1 &&
+        /xxz-xyzw-res\.hortorgames\.com\/data\/cache-race-a\/config\.json$/.test(
+          url,
+        )
+      )
+        return okResponse();
       return { ok: false };
     }
     return okResponse();

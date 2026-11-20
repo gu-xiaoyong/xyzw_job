@@ -168,42 +168,121 @@ export async function fillHangUpTime({
   return { sent: before.remaining, ...after };
 }
 
+const CONFIG_FETCH_TIMEOUT = 30000;
+
+/**
+ * 解压 cocos 压缩 uuid：前 2 位十六进制原样保留，其余 20 位 base64
+ * 解出 15 字节 → 30 位 hex，按 8-4-4-4-12 加横线拼成完整 uuid。
+ * @param {string} compressed bundle 清单 uuids 数组中的压缩形式。
+ * @returns {string} 完整带横线 uuid（远程 bundle 落盘文件名用它）。
+ */
+function decodeCocosUuid(compressed) {
+  let hex = "";
+  const body = atob(compressed.slice(2));
+  for (let i = 0; i < body.length; i++)
+    hex += body.charCodeAt(i).toString(16).padStart(2, "0");
+  const full = compressed.slice(0, 2) + hex;
+  return `${full.slice(0, 8)}-${full.slice(8, 12)}-${full.slice(12, 16)}-${full.slice(16, 20)}-${full.slice(20)}`;
+}
+
+/**
+ * 在 cocos bundle 清单里定位资产并给出其 native 文件的下载信息。
+ * @param {object} manifest remote/config/config.{版本}.json 清单内容。
+ * @param {string} assetName 资产路径名，如 "configc"。
+ * @returns {{uuid: string, hash: string}|null} 压缩 uuid 与 native 版本号。
+ */
+function findBundleNativeAsset(manifest, assetName) {
+  const entry = Object.entries(manifest?.paths ?? {}).find(
+    ([, value]) => Array.isArray(value) && value[0] === assetName,
+  );
+  if (!entry) return null;
+  const index = Number(entry[0]);
+  const uuid = manifest.uuids?.[index];
+  const hash = manifest.versions?.native?.[index * 2 + 1];
+  return typeof uuid === "string" && typeof hash === "string"
+    ? { uuid, hash }
+    : null;
+}
+
+/**
+ * 通过 cocos 远程 bundle 加载配置（官方 2026-11-20 起的主要发布路径）：
+ * 先取 remote/config/config.{版本}.json 清单，再取 configc 资产的 native BON 文件。
+ * @param {Function} fetchConfig Fetch implementation for the official CDN.
+ * @param {string} host CDN host.
+ * @param {string} version dataBundleVer.
+ * @returns {Promise<object>} 解码后的配置对象。
+ */
+async function loadBundleConfig(fetchConfig, host, version) {
+  const manifestResponse = await fetchConfig(
+    `https://${host}/remote/config/config.${version}.json`,
+    { signal: AbortSignal.timeout(CONFIG_FETCH_TIMEOUT) },
+  );
+  if (!manifestResponse.ok)
+    throw new Error(`bundle清单 HTTP ${manifestResponse.status}`);
+  const asset = findBundleNativeAsset(await manifestResponse.json(), "configc");
+  if (!asset) throw new Error("bundle清单缺少configc资产");
+  const dataResponse = await fetchConfig(
+    `https://${host}/remote/config/native/${asset.uuid.slice(0, 2)}/${decodeCocosUuid(asset.uuid)}.${asset.hash}.bin`,
+    { signal: AbortSignal.timeout(CONFIG_FETCH_TIMEOUT) },
+  );
+  if (!dataResponse.ok)
+    throw new Error(`bundle数据 HTTP ${dataResponse.status}`);
+  return bon.decode(new Uint8Array(await dataResponse.arrayBuffer()));
+}
+
+/**
+ * 构造 /data/{版本}/{文件} 直链候选源（旧发布路径，2026-11-20 后新版本已不再发布）。
+ */
+function directSource(label, host, file, parse) {
+  return {
+    label,
+    load: async (fetchConfig, version) => {
+      const response = await fetchConfig(
+        `https://${host}/data/${version}/${file}`,
+        { signal: AbortSignal.timeout(CONFIG_FETCH_TIMEOUT) },
+      );
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return parse(response);
+    },
+  };
+}
+
+const RES_CDN = "xxz-xyzw-res.hortorgames.com";
+const ALI_CDN = "xxz-xyzw-alires.hortorgames.com";
+
 /**
  * 官方任务配置的候选下载源，按顺序尝试，全部失败才报错。
  *
- * 游戏客户端对 "config" 资产有两条加载路径（见协议 dump）：
- * 1. /data/{版本}/config.json   —— 纯 JSON；
- * 2. /data/{版本}/configc.bin   —— BON 二进制（与 json 内容一致，游戏主体平台一直走这条）。
- * 2026-11-20 观测到服务端下发的新版本 config.json 404 而定时任务中断，
- * 故 json 失败后必须回退 bin 源；备 CDN 域名取自游戏自身的多 CDN 切换表。
+ * 游戏客户端加载 "config" 资产有三条路径（见协议 dump loadConfig）：
+ * 1. remote/config bundle：config.{版本}.json 清单 → configc native BON 文件
+ *    （cocos 远程 bundle，2026-11-20 起官方新版本只发布到这里）；
+ * 2. /data/{版本}/config.json —— 纯 JSON（旧直链路径）；
+ * 3. /data/{版本}/configc.bin —— BON 二进制（旧直链路径）。
+ * json 与 BON 内容一致，BON 用 bon.decode 解码；两台 CDN 域名取自游戏自身的多 CDN 切换表。
  */
 export const DAILY_CONFIG_SOURCES = [
   {
-    label: "主CDN(config.json)",
-    url: (version) =>
-      `https://xxz-xyzw-res.hortorgames.com/data/${version}/config.json`,
-    parse: (response) => response.json(),
+    label: "主CDN(bundle)",
+    load: (fetchConfig, version) =>
+      loadBundleConfig(fetchConfig, RES_CDN, version),
   },
   {
-    label: "主CDN(configc.bin)",
-    url: (version) =>
-      `https://xxz-xyzw-res.hortorgames.com/data/${version}/configc.bin`,
-    parse: async (response) =>
-      bon.decode(new Uint8Array(await response.arrayBuffer())),
+    label: "备CDN(bundle)",
+    load: (fetchConfig, version) =>
+      loadBundleConfig(fetchConfig, ALI_CDN, version),
   },
-  {
-    label: "备CDN(config.json)",
-    url: (version) =>
-      `https://xxz-xyzw-alires.hortorgames.com/data/${version}/config.json`,
-    parse: (response) => response.json(),
-  },
-  {
-    label: "备CDN(configc.bin)",
-    url: (version) =>
-      `https://xxz-xyzw-alires.hortorgames.com/data/${version}/configc.bin`,
-    parse: async (response) =>
-      bon.decode(new Uint8Array(await response.arrayBuffer())),
-  },
+  directSource("主CDN(config.json)", RES_CDN, "config.json", (response) =>
+    response.json(),
+  ),
+  directSource("主CDN(configc.bin)", RES_CDN, "configc.bin", async (response) =>
+    bon.decode(new Uint8Array(await response.arrayBuffer())),
+  ),
+  directSource("备CDN(config.json)", ALI_CDN, "config.json", (response) =>
+    response.json(),
+  ),
+  directSource("备CDN(configc.bin)", ALI_CDN, "configc.bin", async (response) =>
+    bon.decode(new Uint8Array(await response.arrayBuffer())),
+  ),
 ];
 
 /**
@@ -234,14 +313,9 @@ export async function loadDailyTaskConfig(
       const failures = [];
       for (const source of DAILY_CONFIG_SOURCES) {
         try {
-          const response = await fetchConfig(source.url(version), {
-            signal: AbortSignal.timeout(30000),
-          });
-          if (!response.ok) {
-            failures.push(`${source.label}: HTTP ${response.status}`);
-            continue;
-          }
-          return validateDailyTaskConfig(await source.parse(response));
+          return validateDailyTaskConfig(
+            await source.load(fetchConfig, version),
+          );
         } catch (error) {
           failures.push(`${source.label}: ${error.message}`);
         }
