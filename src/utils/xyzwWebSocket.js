@@ -340,11 +340,14 @@ export function registerDefaultCommands(reg) {
   const registry = reg
     .registerHeartbeat()
     // 角色/系统
+    // clientVersion/platformExt 来自 2026-11-21 实机抓包（h5 网页客户端身份）：
+    // 旧值 "2.21.2-...-wx"/"mix" 让会话自称古老小游戏客户端，游戏更新后服务端
+    // 对写操作（如 legacy_claimhangup 领取）返回 800040 拒绝，读操作不受限
     .register("role_getroleinfo", {
-      clientVersion: "2.21.2-fa918e1997301834-wx",
+      clientVersion: "1.90.2-h5web",
       inviteUid: 0,
       platform: "hortor",
-      platformExt: "mix",
+      platformExt: "h5",
       scene: "",
     })
     .register("system_getdatabundlever", { isAudit: false })
