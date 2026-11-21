@@ -6,6 +6,7 @@
 import { $CacheManager } from "@/stores/cache";
 import { onBgTick } from "./bgTicker.js";
 import { g_utils } from "./bonProtocol.js";
+import { GAME_CLIENT_INFO_BODY } from "./gameIdentity.js";
 import { sleep } from "./helperTaskRunner.js";
 import { gameLogger, LOG_LEVELS, wsLogger } from "./logger.js";
 
@@ -339,17 +340,8 @@ export class CommandRegistry {
 export function registerDefaultCommands(reg) {
   const registry = reg
     .registerHeartbeat()
-    // 角色/系统
-    // clientVersion/platformExt 来自 2026-11-21 实机抓包（h5 网页客户端身份）：
-    // 旧值 "2.21.2-...-wx"/"mix" 让会话自称古老小游戏客户端，游戏更新后服务端
-    // 对写操作（如 legacy_claimhangup 领取）返回 800040 拒绝，读操作不受限
-    .register("role_getroleinfo", {
-      clientVersion: "1.90.2-h5web",
-      inviteUid: 0,
-      platform: "hortor",
-      platformExt: "h5",
-      scene: "",
-    })
+    // 角色/系统（身份声明统一走 gameIdentity，旧值导致写操作被 800040 拒的记录见该文件）
+    .register("role_getroleinfo", { ...GAME_CLIENT_INFO_BODY })
     .register("system_getdatabundlever", { isAudit: false })
     .register("system_buygold", { buyNum: 1 })
     .register("system_claimhangupreward")

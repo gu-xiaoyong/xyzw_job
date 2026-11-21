@@ -4,6 +4,8 @@
  */
 import lz4 from "lz4js";
 
+import { GAME_CLIENT_INFO_BODY } from "./gameIdentity.js";
+
 // -----------------------------
 // BON 编解码器核心实现
 // -----------------------------
@@ -802,17 +804,7 @@ export const GameMessages = {
   // 获取角色信息
   getRoleInfo: (ack = 0, seq = 0, params = {}) => ({
     cmd: "role_getroleinfo",
-    body: encode(
-      {
-        clientVersion: "2.43.4-a7db1319a3025acb-wx",
-        inviteUid: 0,
-        platform: "hortor",
-        platformExt: "mix",
-        scene: "",
-        ...params,
-      },
-      getEnc("x"),
-    ),
+    body: encode({ ...GAME_CLIENT_INFO_BODY, ...params }, getEnc("x")),
     ack: ack || 0,
     seq: seq || 0,
     time: Date.now(),

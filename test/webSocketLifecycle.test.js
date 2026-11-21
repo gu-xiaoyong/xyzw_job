@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { GAME_CLIENT_INFO_BODY } from "../src/utils/gameIdentity.js";
 import { loadModule } from "./helpers/loadModule.js";
 
 /** Load either real client with deterministic timers and no network access. */
@@ -33,6 +34,7 @@ async function createClient(file, exportName) {
       },
     },
     "./bonProtocol.js": { g_utils: utils },
+    "./gameIdentity.js": { GAME_CLIENT_INFO_BODY },
     "./logger.js": { gameLogger: logger, wsLogger: logger },
     "./helperTaskRunner.js": { sleep: async () => {} },
     // 后台心跳兜底：单测里不需要真实 Worker，返回一个空的取消函数

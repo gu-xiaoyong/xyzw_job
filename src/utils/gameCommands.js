@@ -4,6 +4,7 @@
  */
 
 import { g_utils } from "./bonProtocol.js";
+import { GAME_CLIENT_INFO_BODY } from "./gameIdentity.js";
 
 // 生成随机数工具函数
 
@@ -36,11 +37,7 @@ export class GameCommands {
     return {
       cmd: "role_getroleinfo",
       body: this.g_utils.bon.encode({
-        clientVersion: "2.21.2-fa918e1997301834-wx",
-        inviteUid: 0,
-        platform: "hortor",
-        platformExt: "mix",
-        scene: "",
+        ...GAME_CLIENT_INFO_BODY,
         ...params,
       }),
       ack: ack || 0,

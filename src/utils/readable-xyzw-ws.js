@@ -216,13 +216,15 @@ const gameMessageTemplates = {
   }),
 
   // 获取角色信息
+  // 版本串快照对齐 gameIdentity.js（2026-11-21 h5 实机身份）；本文件是独立
+  // 解码产物不引入模块依赖，故此处为字面量，游戏更新后两处需同步
   role_getroleinfo: (client, ack, seq, params) => ({
     cmd: "role_getroleinfo",
     body: client.bon.encode({
-      clientVersion: "2.21.2-fa918e1997301834-wx",
+      clientVersion: "1.90.2-h5web",
       inviteUid: 0,
       platform: "hortor",
-      platformExt: "mix",
+      platformExt: "h5",
       scene: "",
       ...params,
     }),

@@ -352,6 +352,15 @@ test("assistant transport cannot open or reconnect while an online game owns the
       "@/stores/cache": { $CacheManager: { getCache: () => ({}) } },
       "./bgTicker.js": { onBgTick: () => () => {} },
       "./bonProtocol.js": { g_utils: {} },
+      "./gameIdentity.js": {
+        GAME_CLIENT_INFO_BODY: {
+          clientVersion: "1.90.2-h5web",
+          inviteUid: 0,
+          platform: "hortor",
+          platformExt: "h5",
+          scene: "",
+        },
+      },
       "./helperTaskRunner.js": { sleep: async () => {} },
       "./logger.js": { gameLogger: logger, wsLogger: logger },
     },
