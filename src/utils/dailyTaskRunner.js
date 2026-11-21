@@ -601,6 +601,15 @@ export class DailyTaskRunner {
             this.log("功法残卷暂时不可领取（12400160），下轮再试", "info");
             return true;
           }
+          if (code === 800040) {
+            // 游戏更新后出现的新错误码（2026-11-21 起 claim 返回），语义未知，
+            // 按暂态处理不算失败，等下轮重试
+            this.log(
+              "功法残卷领取返回未知错误（800040，游戏更新后新码），下轮再试",
+              "warning",
+            );
+            return true;
+          }
           this.log(`领取功法残卷失败: ${error.message || "未知错误"}`, "error");
           throw error;
         }

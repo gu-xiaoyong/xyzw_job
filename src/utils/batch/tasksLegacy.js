@@ -189,6 +189,18 @@ export function createTasksLegacy(deps) {
         const codeMatch = /服务器错误: (\d+)/.exec(error.message || "");
         const errorCode =
           error?.code ?? (codeMatch ? Number(codeMatch[1]) : null);
+        if (errorCode === 800040) {
+          // 2026-11-21 游戏更新后 claim 开始返回的新错误码，语义未知。
+          // 模块并未下线（未解锁的小号仍返回正常的 200160/12400160），按暂态
+          // 降级不算失败，等下轮定时任务重试；确认新协议后改走新命令
+          tokenStatus.value[tokenId] = "completed";
+          addLog({
+            time: new Date().toLocaleTimeString(),
+            message: `${token.name} 领取返回未知错误（800040，游戏更新后新码），下轮再试`,
+            type: "warning",
+          });
+          return;
+        }
         if (
           errorCode === 200020 ||
           errorCode === 12400000 ||
